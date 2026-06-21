@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { 
   X, FileText, Image as ImageIcon, Check, Loader2,
-  Eye, Settings, Layout, Grid, Info, Printer
+  Printer
 } from "lucide-react";
 
 export default function ExportModal({ isOpen, onClose, onExport, elements = [], exhibitors = [], attendees = [] }) {

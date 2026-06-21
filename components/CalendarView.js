@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Plus, X, Calendar, Clock, Edit2, Trash2, Image, User } from "lucide-react";
+import { Plus, Calendar, Clock, Edit2, Trash2, Image as ImageIcon, User } from "lucide-react";
 
 export default function CalendarView({
   sessions,
@@ -394,7 +394,7 @@ export default function CalendarView({
                 />
 
                 <label className="w-8 h-8 rounded-full flex items-center justify-center bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-150 cursor-pointer transition-colors duration-200" title="Upload Image">
-                  <Image size={14} />
+                  <ImageIcon size={14} />
                   <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, "speaker")} className="hidden" />
                 </label>
 
@@ -412,6 +412,7 @@ export default function CalendarView({
                 <div className="flex flex-wrap gap-2 pt-2.5 border-t border-slate-100">
                   {speakersList.map(s => (
                     <div key={s.id} className="flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 bg-white border border-slate-150 rounded-full text-[11px] font-semibold text-slate-700 shadow-sm">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={s.image} className="w-5 h-5 rounded-full object-cover" alt="" />
                       <span>{s.name}</span>
                       <button type="button" onClick={() => removePerson(s.id, "speaker")} className="text-slate-400 hover:text-rose-500 ml-1 font-bold">×</button>
@@ -466,7 +467,7 @@ export default function CalendarView({
                 />
 
                 <label className="w-8 h-8 rounded-full flex items-center justify-center bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-150 cursor-pointer transition-colors duration-200" title="Upload Image">
-                  <Image size={14} />
+                  <ImageIcon size={14} />
                   <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, "moderator")} className="hidden" />
                 </label>
 
@@ -484,6 +485,7 @@ export default function CalendarView({
                 <div className="flex flex-wrap gap-2 pt-2.5 border-t border-slate-100">
                   {moderatorsList.map(m => (
                     <div key={m.id} className="flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 bg-white border border-slate-150 rounded-full text-[11px] font-semibold text-slate-700 shadow-sm">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={m.image} className="w-5 h-5 rounded-full object-cover" alt="" />
                       <span>{m.name}</span>
                       <button type="button" onClick={() => removePerson(m.id, "moderator")} className="text-slate-400 hover:text-rose-500 ml-1 font-bold">×</button>
@@ -513,7 +515,7 @@ export default function CalendarView({
                 {logoImg ? (
                   <div className="w-8 h-8 rounded-lg border-2 border-indigo-200 bg-contain bg-center bg-no-repeat shrink-0 bg-white" style={{ backgroundImage: `url(${logoImg})` }} />
                 ) : (
-                  <div className="w-8 h-8 rounded-lg bg-slate-200 flex items-center justify-center text-slate-400 shrink-0"><Image size={14} /></div>
+                  <div className="w-8 h-8 rounded-lg bg-slate-200 flex items-center justify-center text-slate-400 shrink-0"><ImageIcon size={14} /></div>
                 )}
                 
                 <span className="text-xs text-slate-500 flex-1 truncate">
@@ -521,7 +523,7 @@ export default function CalendarView({
                 </span>
 
                 <label className="w-8 h-8 rounded-full flex items-center justify-center bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-150 cursor-pointer transition-colors duration-200" title="Upload Logo">
-                  <Image size={14} />
+                  <ImageIcon size={14} />
                   <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, "logo")} className="hidden" />
                 </label>
 
@@ -539,6 +541,7 @@ export default function CalendarView({
                 <div className="flex flex-wrap gap-2 pt-2.5 border-t border-slate-100">
                   {logosList.map(l => (
                     <div key={l.id} className="flex items-center gap-1.5 pl-1.5 pr-2 py-1 bg-white border border-slate-150 rounded-xl text-[10px] font-semibold text-slate-700 shadow-sm">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={l.image} className="h-4 object-contain max-w-[60px]" alt="" />
                       <span className="text-[9px] text-slate-400 font-bold bg-slate-100 px-1.5 py-0.5 rounded truncate max-w-[80px]">{l.label}</span>
                       <button type="button" onClick={() => removeLogo(l.id)} className="text-slate-400 hover:text-rose-500 ml-1 font-bold text-xs">×</button>
@@ -691,6 +694,7 @@ export default function CalendarView({
                             {Array.isArray(session.speakers) && session.speakers.map((s, idx) => (
                               s ? (
                                 <div key={idx} className="flex items-center gap-2 bg-slate-50 border border-slate-150 pl-1.5 pr-3 py-1.5 rounded-full text-xs font-semibold text-slate-700 shadow-sm">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
                                   <img src={s.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name || "User")}`} className="w-6 h-6 rounded-full object-cover shrink-0" alt="" />
                                   <span className="truncate max-w-[120px]">{s.name || "Unknown"}</span>
                                 </div>
@@ -706,6 +710,7 @@ export default function CalendarView({
                               {session.moderators.map((m, idx) => (
                                 m ? (
                                   <div key={idx} className="flex items-center gap-2 bg-slate-50 border border-slate-150 pl-1.5 pr-3 py-1.5 rounded-full text-xs font-semibold text-slate-700 shadow-sm">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
                                     <img src={m.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(m.name || "User")}`} className="w-6 h-6 rounded-full object-cover shrink-0" alt="" />
                                     <span className="truncate max-w-[120px]">{m.name || "Unknown"}</span>
                                   </div>
@@ -736,6 +741,7 @@ export default function CalendarView({
                                 {items.map((logo, idx) => (
                                   logo && logo.image ? (
                                     <div key={idx} className="flex items-center justify-center bg-white border border-slate-150 px-3 py-2 rounded-2xl h-12 min-w-[48px] shadow-sm select-none">
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
                                       <img src={logo.image} className="h-7 object-contain max-w-[150px]" alt="logo" />
                                     </div>
                                   ) : null
@@ -758,6 +764,7 @@ export default function CalendarView({
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-2 text-xs font-semibold text-slate-650 bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-150 hover:text-indigo-650 px-4 py-2 rounded-xl transition-all duration-200"
                         >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src="https://www.gstatic.com/calendar/images/dynamiclogo_2020q4/calendar_31_2x.png" className="w-4.5 h-4.5 object-contain" alt="" />
                           Add to Google Calendar
                         </a>

@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { 
-  X, Mail, Send, Check, Loader2, AlertTriangle, 
-  Settings, Info, Printer, Users, Building2, CheckSquare, Square, Search
+  X, Mail, Send, Loader2, AlertTriangle, 
+  CheckSquare, Square, Search
 } from "lucide-react";
 import { logCommunication, upsertExhibitor } from "../lib/db";
 

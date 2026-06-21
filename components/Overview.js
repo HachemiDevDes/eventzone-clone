@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Users, CheckCircle2, DollarSign, Calendar, Zap, Plus, ArrowRight, UserPlus, Map } from "lucide-react";
+import { Users, CheckCircle2, DollarSign, Calendar, Zap, ArrowRight, UserPlus, Map } from "lucide-react";
 
 export default function Overview({ 
   eventDetails, 

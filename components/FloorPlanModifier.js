@@ -2481,6 +2481,7 @@ export default function FloorPlanModifier({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [historyIndex, history, selectedIds, elements, toolMode, blueprintUrl, blueprintName, blueprintOpacity, blueprintX, blueprintY, blueprintWidth, blueprintHeight, blueprintRotation, blueprintIsLocked]);
 
   // Upload picture handler
@@ -4264,6 +4265,7 @@ export default function FloorPlanModifier({
                       <div className="flex gap-3 items-center">
                         {mobileDetailsData.effectiveSeatId ? (
                           mobileDetailsData.attendee && mobileDetailsData.attendee.image ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
                             <img src={mobileDetailsData.attendee.image} className="w-12 h-12 rounded-xl object-cover shadow border border-slate-100 bg-white shrink-0" alt={mobileDetailsData.attendee.name} />
                           ) : (
                             <div className={`w-12 h-12 rounded-xl bg-gradient-to-tr ${mobileDetailsData.logoGradient} flex items-center justify-center text-white shadow shrink-0`}>
@@ -4271,6 +4273,7 @@ export default function FloorPlanModifier({
                             </div>
                           )
                         ) : mobileDetailsData.exhibitor && mobileDetailsData.exhibitor.logo ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
                           <img src={mobileDetailsData.exhibitor.logo} className="w-12 h-12 rounded-xl object-cover shadow border border-slate-100 bg-white" alt={mobileDetailsData.exhibitor.name} />
                         ) : (() => {
                           const IconComp = getElementIconComponent(mobileDetailsData.el.type);
@@ -4647,6 +4650,7 @@ export default function FloorPlanModifier({
                   <div className="flex gap-4 items-center">
                     {effectiveSeatId ? (
                       attendee && attendee.image ? (
+                        /* eslint-disable-next-line @next/next/no-img-element */
                         <img src={attendee.image} className="w-16 h-16 rounded-2xl object-cover shadow-md border border-slate-100 bg-white shrink-0" alt={attendee.name} />
                       ) : (
                         <div className={`w-16 h-16 rounded-2xl bg-gradient-to-tr ${logoGradient} flex items-center justify-center text-white shadow-md shrink-0`}>
@@ -4654,6 +4658,7 @@ export default function FloorPlanModifier({
                         </div>
                       )
                     ) : exhibitor && exhibitor.logo ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
                       <img src={exhibitor.logo} className="w-16 h-16 rounded-2xl object-cover shadow-md border border-slate-100 bg-white" alt={exhibitor.name} />
                     ) : (() => {
                       const IconComp = getElementIconComponent(el.type);

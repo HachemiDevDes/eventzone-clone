@@ -2,9 +2,9 @@
 
 import React, { useState } from "react";
 import { 
-  Users, CheckCircle2, Ticket, ShieldAlert, Building2, 
+  Users, Ticket, Building2, 
   Award, Briefcase, Mic, Search, Trash2, Check, X,
-  MapPin, Calendar, FileText, Upload, Plus, BarChart4, Pencil, Mail
+  Calendar, Upload, Plus, BarChart4, Pencil, Mail
 } from "lucide-react";
 
 export default function GenericTableView({ 
@@ -256,6 +256,7 @@ function AttendeesView({ state, onUpdateState, onOpenModal }) {
                 filtered.map(a => (
                   <tr key={a.id} className="hover:bg-slate-50/55 transition-colors duration-150">
                     <td className="py-4 px-6 font-semibold flex items-center gap-3">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img 
                         src={a.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(a.name)}&background=random`} 
                         className="w-8 h-8 rounded-full object-cover shadow-inner" 
@@ -449,6 +450,7 @@ function OrganizationsView({ state, onUpdateState, onOpenModal }) {
             <div key={o.id} className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex flex-col justify-between relative group">
               <div className="flex justify-between items-start mb-4">
                 {o.logo ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
                   <img src={o.logo} className="w-12 h-12 rounded-xl object-cover border border-slate-100 shadow-inner" alt={o.name} />
                 ) : (
                   <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 font-extrabold text-xl flex items-center justify-center select-none">
@@ -532,6 +534,7 @@ function SponsorsView({ state, onUpdateState, onOpenModal }) {
                     ×
                   </button>
                 </div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img 
                   src={s.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=random`} 
                   className="w-14 h-14 rounded-full object-cover shadow-sm bg-white" 
@@ -606,6 +609,7 @@ function ExhibitorsView({ state, onUpdateState, onOpenModal }) {
             <div key={e.id} className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex flex-col justify-between relative group">
               <div className="flex justify-between items-start mb-4">
                 {e.logo ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
                   <img src={e.logo} className="w-12 h-12 rounded-xl object-cover border border-slate-100 shadow-inner" alt={e.name} />
                 ) : (
                   <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 font-extrabold text-xl flex items-center justify-center select-none">
@@ -800,6 +804,7 @@ function SpeakersDirectoryView({ state, onUpdateState }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
           {directory.map((s, idx) => (
             <div key={idx} className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex gap-4 items-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={s.image} className="w-16 h-16 rounded-full object-cover shrink-0 border border-slate-100" alt="" />
               <div className="flex flex-col gap-1 min-w-0 leading-tight">
                 <span className={`px-2 py-0.5 rounded-full font-bold text-[9px] w-fit uppercase ${s.role === 'speaker' ? 'bg-sky-50 text-sky-700' : 'bg-amber-50 text-amber-700'}`}>
@@ -1035,6 +1040,7 @@ function CheckInView({ state, onUpdateState }) {
                   return (
                     <tr key={a.id} className="hover:bg-slate-50/50 transition-colors duration-150">
                       <td className="py-4 px-6 font-semibold flex items-center gap-3">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img 
                           src={`https://ui-avatars.com/api/?name=${encodeURIComponent(a.name)}&background=random`} 
                           className="w-8 h-8 rounded-full object-cover" 

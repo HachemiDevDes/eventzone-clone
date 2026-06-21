@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import {
   Map, Plus, Edit3, Copy, Trash2, Grid, LayoutGrid,
-  Clock, Layers, ChevronRight, AlertTriangle
+  Clock, Layers
 } from "lucide-react";
 
 // Thumbnail preview: mini SVG representation of element counts
@@ -15,6 +15,7 @@ function PlanThumbnail({ plan }) {
     <div className="relative w-full h-36 rounded-xl overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center border border-slate-200 group-hover:border-indigo-200 transition-colors duration-200">
       {hasBlueprint ? (
         // Blueprint image thumbnail
+        /* eslint-disable-next-line @next/next/no-img-element */
         <img
           src={plan.blueprint.url}
           alt="Blueprint"

@@ -926,7 +926,7 @@ const FloorPlanCanvas = React.forwardRef(({
     };
   }, [blueprintUrl]);
 
-  const handleZoomToFit = () => {
+  const handleZoomToFit = React.useCallback(() => {
     if (stageWidth <= 0 || stageHeight <= 0) return;
     const scaleX = stageWidth / canvasWidth;
     const scaleY = stageHeight / canvasHeight;
@@ -938,20 +938,20 @@ const FloorPlanCanvas = React.forwardRef(({
         y: (stageHeight - canvasHeight * scale) / 2
       });
     }
-  };
+  }, [stageWidth, stageHeight, canvasWidth, canvasHeight]);
 
   // Reset initialization state and zoom to fit when preview mode changes to prevent visual layout jumps
   useEffect(() => {
     isInitializedRef.current = false;
     handleZoomToFit();
-  }, [isPreviewMode]);
+  }, [isPreviewMode, handleZoomToFit]);
 
   // Centering the canvas area in the viewport initially
   useEffect(() => {
     if (stageWidth <= 0 || stageHeight <= 0 || isInitializedRef.current) return;
     handleZoomToFit();
     isInitializedRef.current = true;
-  }, [stageWidth, stageHeight, canvasWidth, canvasHeight]);
+  }, [stageWidth, stageHeight, canvasWidth, canvasHeight, handleZoomToFit]);
 
   // Update Konva transformer node selection
   useEffect(() => {

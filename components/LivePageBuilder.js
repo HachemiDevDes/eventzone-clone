@@ -3,10 +3,10 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
-  Calendar, MapPin, AlignLeft, Sparkles, Paintbrush, 
-  Smartphone, Monitor, Eye, Layout, Type, Check, 
-  Compass, Users, Clock, AlertCircle, Bookmark, Ticket, Award, HelpCircle,
-  Plus, Trash2, Image, ChevronLeft, ChevronRight, Play, Map
+  Calendar, MapPin, Sparkles, Paintbrush, 
+  Smartphone, Monitor, Layout, Check, 
+  Compass, Users, Clock, Bookmark, Ticket, Award, HelpCircle,
+  Plus, Trash2, Image as GalleryIcon, ChevronLeft, ChevronRight, Play, Map
 } from "lucide-react";
 
 // Google Fonts free for commercial use list (to show professional visual design)
@@ -256,7 +256,7 @@ export default function LivePageBuilder({ eventDetails, onUpdateEventDetails, se
           {/* Section 2: Banner Image Gallery controls */}
           <div className="flex flex-col gap-4">
             <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-              <Image size={14} className="text-indigo-600" />
+              <GalleryIcon size={14} className="text-indigo-600" />
               <span>Event Gallery Banner</span>
             </h3>
 
@@ -283,6 +283,7 @@ export default function LivePageBuilder({ eventDetails, onUpdateEventDetails, se
                 {bannerImages.map((img, idx) => (
                   <div key={idx} className="flex items-center justify-between gap-3 p-2 bg-slate-50 border border-slate-100 rounded-xl">
                     <div className="flex items-center gap-2 min-w-0">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={img} className="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0" alt="thumbnail" />
                       <span className="text-[10px] font-bold text-slate-500 truncate">{img}</span>
                     </div>
@@ -547,6 +548,7 @@ export default function LivePageBuilder({ eventDetails, onUpdateEventDetails, se
                                     {items.map((logo, lIdx) => (
                                       logo && logo.image ? (
                                         <div key={lIdx} className="bg-slate-50 border border-slate-100 p-1.5 rounded-lg h-8 min-w-[32px] flex items-center justify-center">
+                                          {/* eslint-disable-next-line @next/next/no-img-element */}
                                           <img src={logo.image} className="h-5 object-contain max-w-[80px]" alt="logo" />
                                         </div>
                                       ) : null
@@ -572,6 +574,7 @@ export default function LivePageBuilder({ eventDetails, onUpdateEventDetails, se
                     {displaySpeakers.map((speaker, idx) => (
                       <div key={idx} className="p-3.5 bg-white border border-slate-150 rounded-2xl shadow-sm flex items-center gap-3 hover:shadow-md transition-all duration-300">
                         {speaker.image ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
                           <img src={speaker.image} alt={speaker.name} className="w-10 h-10 rounded-full border border-slate-100 shrink-0 object-cover" />
                         ) : (
                           <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 font-extrabold shrink-0 text-xs uppercase">
@@ -652,6 +655,7 @@ export default function LivePageBuilder({ eventDetails, onUpdateEventDetails, se
                       {displayExhibitors.map((ex) => (
                         <div key={ex.id} className="px-3 py-2 bg-white border border-slate-150 rounded-xl shadow-sm text-[10px] font-bold text-slate-650 flex items-center gap-2">
                           {ex.logo && (
+                            /* eslint-disable-next-line @next/next/no-img-element */
                             <img src={ex.logo} className="w-4.5 h-4.5 rounded object-cover border border-slate-100" alt="" />
                           )}
                           <span>{ex.name}</span>

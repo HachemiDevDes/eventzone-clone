@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { 
-  Users, CheckCircle2, Ticket, ShieldAlert, Building2, 
-  Award, Briefcase, Mic, ChevronDown, LayoutDashboard, Calendar, 
-  MapPin, Users2, BarChart3, Plus, X, Globe, Map, Sparkles, Upload, Image, Mail
+  CheckCircle2, Ticket, ShieldAlert, 
+  ChevronDown, LayoutDashboard, Calendar, 
+  Users2, BarChart3, X, Globe, Map, Sparkles, Upload, Mail
 } from "lucide-react";
 
 import Overview from "../components/Overview";
@@ -800,6 +800,7 @@ export default function Home() {
               <label className="text-[10px] font-bold text-slate-450 uppercase tracking-wider">Attendee Picture</label>
               <div className="flex items-center gap-3">
                 {modalLogo ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
                   <img src={modalLogo} className="w-12 h-12 rounded-xl object-cover border border-slate-200" alt="Attendee picture" />
                 ) : (
                   <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400 text-[9px] font-bold text-center p-1 leading-tight select-none">
@@ -862,6 +863,7 @@ export default function Home() {
               <label className="text-[10px] font-bold text-slate-450 uppercase tracking-wider">Company Logo</label>
               <div className="flex items-center gap-3">
                 {modalLogo ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
                   <img src={modalLogo} className="w-12 h-12 rounded-xl object-cover border border-slate-200" alt="Logo preview" />
                 ) : (
                   <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400 text-[9px] font-bold text-center p-1 leading-tight select-none">
@@ -970,6 +972,7 @@ export default function Home() {
               <label className="text-[10px] font-bold text-slate-450 uppercase tracking-wider">Sponsor Logo</label>
               <div className="flex items-center gap-3">
                 {modalLogo ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
                   <img src={modalLogo} className="w-12 h-12 rounded-xl object-cover border border-slate-200" alt="Logo preview" />
                 ) : (
                   <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400 text-[9px] font-bold text-center p-1 leading-tight select-none">
@@ -1121,6 +1124,7 @@ export default function Home() {
       {!(currentView === "floor-plan" && activeFloorPlanId !== null) && (
       <aside className="w-[260px] h-screen bg-white border-r border-slate-200 py-8 px-4 flex flex-col gap-8 sticky top-0 overflow-y-auto shrink-0 select-none z-40">
         <div className="px-3 py-1 select-none">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="https://i.imgur.com/jFDrQbM.png" className="h-6 w-auto object-contain" alt="eventzone logo" />
         </div>
 
