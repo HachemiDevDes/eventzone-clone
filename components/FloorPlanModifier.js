@@ -525,6 +525,7 @@ export default function FloorPlanModifier({
   useEffect(() => {
     if (isMobileDirectoryOpen && previewDeviceMode === "mobile") {
       setPreviewFilter("all");
+      setPreviewSearchQuery("");
     }
   }, [isMobileDirectoryOpen, previewDeviceMode]);
 
@@ -4209,10 +4210,10 @@ export default function FloorPlanModifier({
                       <div className="w-12 h-1.5 bg-slate-300 rounded-full"></div>
                     </div>
                     
-                    <div className="px-5 pb-3 flex justify-between items-center shrink-0">
+                    <div className="px-5 pb-3.5 flex justify-between items-center shrink-0">
                       <div className="flex flex-col">
                         <h3 className="text-xs font-bold text-slate-800">Attendee Directory</h3>
-                        <p className="text-[9px] font-semibold text-slate-400">Search booths or locations</p>
+                        <p className="text-[9px] font-semibold text-slate-400">Browse booths and locations</p>
                       </div>
                       <button 
                         onClick={() => setIsMobileDirectoryOpen(false)}
@@ -4220,28 +4221,6 @@ export default function FloorPlanModifier({
                       >
                         ×
                       </button>
-                    </div>
-
-                    {/* Glassmorphic Search Bar */}
-                    <div className="px-5 pb-3.5 shrink-0">
-                      <div className="relative">
-                        <input
-                          type="text"
-                          placeholder="Search by company, booth, category..."
-                          value={previewSearchQuery}
-                          onChange={(e) => setPreviewSearchQuery(e.target.value)}
-                          className="w-full pl-8 pr-7 py-2 bg-slate-100/70 hover:bg-slate-100 focus:bg-white border border-slate-200/50 focus:border-indigo-400 rounded-xl font-semibold text-[11px] text-slate-850 outline-none shadow-sm transition-all"
-                        />
-                        <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                        {previewSearchQuery && (
-                          <button
-                            onClick={() => setPreviewSearchQuery("")}
-                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-755 text-xs font-bold"
-                          >
-                            ×
-                          </button>
-                        )}
-                      </div>
                     </div>
 
                     {/* View Filter Dropdown removed for mobile preview directory */}
