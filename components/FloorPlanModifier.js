@@ -874,6 +874,7 @@ export default function FloorPlanModifier({
 
   // Floor-plan-level font
   const GOOGLE_FONTS = [
+    { label: "Plus Jakarta Sans", value: "Plus Jakarta Sans" },
     { label: "Inter",          value: "Inter" },
     { label: "Roboto",         value: "Roboto" },
     { label: "Open Sans",      value: "Open Sans" },

@@ -208,7 +208,7 @@ export default function Overview({
             onClick={() => onSwitchView("calendar")}
           >
             <Calendar size={18} />
-            Edit Calendar
+            Edit Timeline
             <ArrowRight size={16} />
           </button>
           

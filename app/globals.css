@@ -1,9 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap');
 @import "tailwindcss";
 
-
 @theme {
-  --font-sans: 'Space Grotesk', sans-serif;
+  --font-sans: 'Plus Jakarta Sans', sans-serif;
   
   --color-indigo-650: #0b5cdb;
   --color-indigo-700: #094eb8;
@@ -37,12 +36,11 @@
   scrollbar-width: none;
 }
 
-body, button, input, textarea, select, span, div, h1, h2, h3, h4, h5, h6, a {
-  font-family: 'Space Grotesk', sans-serif !important;
+body, button, input, textarea, select, span, div, h1, h2, h3, h4, h5, h6, a, p, label {
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
 }
 
 body {
   background-color: #f8fafc;
   color: #0f172a;
 }
-

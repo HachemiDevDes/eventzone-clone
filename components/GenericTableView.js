@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { 
   Users, Ticket, Building2, 
   Award, Briefcase, Mic, Search, Trash2, Check, X,
-  Calendar, Upload, Plus, BarChart4, Pencil, Mail
+  Calendar, Upload, Plus, BarChart4, Pencil, Mail, FileText
 } from "lucide-react";
 
 export default function GenericTableView({ 
@@ -12,7 +12,8 @@ export default function GenericTableView({
   state, 
   onUpdateState, 
   onOpenModal,
-  onUploadFile
+  onUploadFile,
+  onSwitchView
 }) {
   switch (viewName) {
     case "event-details":
@@ -30,7 +31,7 @@ export default function GenericTableView({
     case "speakers":
       return <SpeakersDirectoryView state={state} onUpdateState={onUpdateState} />;
     case "tickets":
-      return <TicketsView state={state} onUpdateState={onUpdateState} onOpenModal={onOpenModal} />;
+      return <TicketsView state={state} onUpdateState={onUpdateState} onOpenModal={onOpenModal} onSwitchView={onSwitchView} />;
     case "check-in":
       return <CheckInView state={state} onUpdateState={onUpdateState} />;
     case "my-team":
@@ -822,8 +823,8 @@ function SpeakersDirectoryView({ state, onUpdateState }) {
 }
 
 // 8. TICKETS VIEW
-function TicketsView({ state, onUpdateState, onOpenModal }) {
-  const { tickets, attendees } = state;
+function TicketsView({ state, onUpdateState, onOpenModal, onSwitchView }) {
+  const { tickets, attendees, forms = [] } = state;
 
   const handleDelete = (id) => {
     if (confirm("Remove this ticket tier?")) {
@@ -842,17 +843,25 @@ function TicketsView({ state, onUpdateState, onOpenModal }) {
 
   return (
     <div className="flex flex-col gap-8 max-w-5xl mx-auto">
-      <header className="flex justify-between items-center select-none">
+      <header className="flex flex-wrap justify-between items-center gap-4 select-none">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Tickets & Pricing</h2>
           <p className="text-sm text-slate-500">Manage ticket tiers, prices, availability, and sales performance.</p>
         </div>
-        <button 
-          onClick={() => onOpenModal("ticket")}
-          className="flex items-center gap-1.5 bg-indigo-650 hover:bg-indigo-700 text-white font-semibold py-2.5 px-4 rounded-xl text-sm transition-all hover:shadow duration-200 cursor-pointer"
-        >
-          <Plus size={16} /> Add Ticket Tier
-        </button>
+        <div className="flex items-center gap-2.5">
+          <button 
+            onClick={() => onSwitchView && onSwitchView("forms")}
+            className="flex items-center gap-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold py-2.5 px-4 rounded-xl text-sm transition-all shadow-xs cursor-pointer"
+          >
+            <FileText size={15} className="text-blue-600" /> Customize Registration Forms
+          </button>
+          <button 
+            onClick={() => onOpenModal("ticket")}
+            className="flex items-center gap-1.5 bg-indigo-650 hover:bg-indigo-700 text-white font-semibold py-2.5 px-4 rounded-xl text-sm transition-all hover:shadow duration-200 cursor-pointer"
+          >
+            <Plus size={16} /> Add Ticket Tier
+          </button>
+        </div>
       </header>
 
       {/* Ticket Stats */}

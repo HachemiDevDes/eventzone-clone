@@ -285,7 +285,7 @@ export default function CalendarView({
   };
 
   return (
-    <div className="flex flex-1 w-full h-[calc(100vh-80px)] overflow-hidden">
+    <div className="flex flex-1 w-full h-[calc(100vh-80px)] overflow-hidden bg-white border border-slate-150 rounded-3xl shadow-xs">
       {/* Resizable Sidebar (SessionEditor) */}
       <aside 
         className="bg-white border-r border-slate-150 p-8 flex flex-col gap-6 overflow-y-auto shrink-0 select-none"
@@ -611,10 +611,10 @@ export default function CalendarView({
 
         {/* Dynamic Day Filter Tabs */}
         {uniqueDates.length > 1 && (
-          <div className="flex gap-2 p-1.5 bg-slate-150 rounded-2xl w-fit mb-8 max-w-full overflow-x-auto shrink-0 scrollbar-none">
+          <div className="flex gap-2 p-1.5 bg-slate-150 rounded-full w-fit mb-8 max-w-full overflow-x-auto shrink-0 scrollbar-none">
             <button
               onClick={() => setActiveFilter("all")}
-              className={`px-5 py-2.5 rounded-xl font-semibold text-xs transition-all duration-200 cursor-pointer whitespace-nowrap ${activeFilter === "all" ? "bg-white text-indigo-650 shadow-sm" : "text-slate-500 hover:text-indigo-600"}`}
+              className={`px-5 py-2.5 rounded-full font-semibold text-xs transition-all duration-200 cursor-pointer whitespace-nowrap ${activeFilter === "all" ? "bg-white text-indigo-650 shadow-sm" : "text-slate-500 hover:text-indigo-600"}`}
             >
               All Dates
             </button>
@@ -622,7 +622,7 @@ export default function CalendarView({
               <button
                 key={date}
                 onClick={() => setActiveFilter(date)}
-                className={`px-5 py-2.5 rounded-xl font-semibold text-xs transition-all duration-200 cursor-pointer whitespace-nowrap ${activeFilter === date ? "bg-white text-indigo-650 shadow-sm" : "text-slate-500 hover:text-indigo-600"}`}
+                className={`px-5 py-2.5 rounded-full font-semibold text-xs transition-all duration-200 cursor-pointer whitespace-nowrap ${activeFilter === date ? "bg-white text-indigo-650 shadow-sm" : "text-slate-500 hover:text-indigo-600"}`}
               >
                 Day {i + 1} ({formatDateLabel(date)})
               </button>
