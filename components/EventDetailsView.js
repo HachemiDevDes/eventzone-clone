@@ -8,7 +8,8 @@ import {
   Clock, Sparkles, AlertCircle, Cloud, CheckCircle2,
   CalendarDays, CalendarRange
 } from "lucide-react";
-import { uploadFileToBucket } from "../lib/db";
+import CustomDatePicker from "./CustomDatePicker";
+import CustomSchedulePicker from "./CustomSchedulePicker";
 
 const EVENT_CATEGORIES = [
   "Technology & AI",
@@ -312,7 +313,7 @@ export default function EventDetailsView({
   };
 
   return (
-    <div className="h-full flex flex-col bg-slate-50/50 rounded-3xl border border-slate-200 overflow-hidden text-left">
+    <div className="space-y-6 w-full text-left pb-12 animate-fade-in font-sans">
       {/* Hidden File Inputs */}
       <input
         type="file"
@@ -330,20 +331,19 @@ export default function EventDetailsView({
       />
 
       {/* Top Header Bar */}
-      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center px-6 sm:px-8 py-5 bg-white border-b border-slate-200 gap-4 shrink-0">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-1 pb-2">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
-            <FileText size={20} className="text-blue-600" />
-            <span>Event Details</span>
+          <h1 className="text-2xl font-bold text-slate-900">
+            Event Details
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-sm text-slate-500">
             Manage your summit schedule, venue location, media assets, and event information.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           {/* Real-time sync status indicator badge */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100/90 border border-slate-200 text-xs font-semibold select-none">
+          <div className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-white border border-slate-200 text-xs font-semibold select-none shadow-2xs">
             {syncStatus === "saving" ? (
               <span className="flex items-center gap-1.5 text-blue-600">
                 <Loader2 size={12} className="animate-spin" />
@@ -361,71 +361,67 @@ export default function EventDetailsView({
             <button
               type="button"
               onClick={onPreviewLandingPage}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+              className="px-4 py-2.5 rounded-2xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-bold transition-all cursor-pointer shadow-2xs flex items-center gap-1.5"
             >
               <ExternalLink size={13} />
-              <span>Preview Public Landing Page</span>
+              <span>Preview Landing Page</span>
             </button>
           )}
         </div>
-      </header>
+      </div>
 
-      {/* Main Content Area with Segmented Tab Selector */}
-      <div className="flex-1 overflow-y-auto p-6 sm:p-8">
-        <div className="max-w-4xl mx-auto space-y-6">
-          
-          {/* Clean Segmented Tab Selector */}
-          <div className="flex items-center justify-start">
-            <div className="flex items-center gap-1 p-1 bg-slate-200/70 rounded-2xl w-full sm:w-auto">
-              <button
-                type="button"
-                onClick={() => setActiveTab("general")}
-                className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === "general"
-                    ? "bg-white text-blue-600 shadow-xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                General Information
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("schedule")}
-                className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === "schedule"
-                    ? "bg-white text-blue-600 shadow-xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                Date &amp; Venue
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("media")}
-                className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === "media"
-                    ? "bg-white text-blue-600 shadow-xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                Media &amp; Gallery
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("contact")}
-                className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === "contact"
-                    ? "bg-white text-blue-600 shadow-xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                Organizer &amp; Contact
-              </button>
-            </div>
-          </div>
+      {/* Clean Segmented Tab Selector */}
+      <div className="flex items-center justify-start">
+        <div className="flex items-center gap-1 p-1 bg-white border border-slate-200 rounded-2xl w-full sm:w-auto shadow-2xs">
+          <button
+            type="button"
+            onClick={() => setActiveTab("general")}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === "general"
+                ? "bg-blue-600 text-white shadow-xs"
+                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+            }`}
+          >
+            General Information
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("schedule")}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === "schedule"
+                ? "bg-blue-600 text-white shadow-xs"
+                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+            }`}
+          >
+            Date &amp; Venue
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("media")}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === "media"
+                ? "bg-blue-600 text-white shadow-xs"
+                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+            }`}
+          >
+            Media &amp; Gallery
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("contact")}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === "contact"
+                ? "bg-blue-600 text-white shadow-xs"
+                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+            }`}
+          >
+            Organizer &amp; Contact
+          </button>
+        </div>
+      </div>
 
-          {/* Form Content Card */}
-          <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-6">
+      {/* Form Content Card */}
+      <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-6">
             
             {/* TAB 1: GENERAL INFORMATION */}
             {activeTab === "general" && (
@@ -550,21 +546,16 @@ export default function EventDetailsView({
                         setIsMultiDay(false);
                         setEndDate(startDate);
                       }}
-                      className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex items-start gap-3 ${
+                      className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
                         !isMultiDay
                           ? "bg-blue-50/60 border-blue-500 text-blue-900 shadow-2xs"
                           : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
                       }`}
                     >
-                      <div className={`p-2 rounded-xl shrink-0 ${!isMultiDay ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>
-                        <CalendarDays size={16} />
-                      </div>
-                      <div>
-                        <span className="text-xs font-bold block">Single Date Event</span>
-                        <span className="text-[11px] text-slate-500 block mt-0.5">
-                          Happens on one specific calendar day
-                        </span>
-                      </div>
+                      <span className="text-xs font-bold block">Single Date Event</span>
+                      <span className="text-[11px] text-slate-500 block mt-0.5">
+                        Happens on one specific calendar day
+                      </span>
                     </button>
 
                     <button
@@ -572,21 +563,16 @@ export default function EventDetailsView({
                       onClick={() => {
                         setIsMultiDay(true);
                       }}
-                      className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex items-start gap-3 ${
+                      className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
                         isMultiDay
                           ? "bg-blue-50/60 border-blue-500 text-blue-900 shadow-2xs"
                           : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
                       }`}
                     >
-                      <div className={`p-2 rounded-xl shrink-0 ${isMultiDay ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>
-                        <CalendarRange size={16} />
-                      </div>
-                      <div>
-                        <span className="text-xs font-bold block">Multiple Dates Event</span>
-                        <span className="text-[11px] text-slate-500 block mt-0.5">
-                          Multi-day convention spanning a date range
-                        </span>
-                      </div>
+                      <span className="text-xs font-bold block">Multiple Dates Event</span>
+                      <span className="text-[11px] text-slate-500 block mt-0.5">
+                        Multi-day convention spanning a date range
+                      </span>
                     </button>
                   </div>
                 </div>
@@ -596,15 +582,13 @@ export default function EventDetailsView({
                   /* Single Day Picker */
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-slate-700">Event Date</label>
-                    <input
-                      type="date"
+                    <CustomDatePicker
                       value={startDate}
-                      onChange={(e) => {
-                        const val = e.target.value;
+                      onChange={(val) => {
                         setStartDate(val);
                         setEndDate(val);
                       }}
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-medium focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
+                      placeholder="Select event date"
                     />
                   </div>
                 ) : (
@@ -612,21 +596,20 @@ export default function EventDetailsView({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium text-slate-700">Start Date</label>
-                      <input
-                        type="date"
+                      <CustomDatePicker
                         value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-medium focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
+                        onChange={(val) => setStartDate(val)}
+                        placeholder="Select start date"
                       />
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium text-slate-700">End Date</label>
-                      <input
-                        type="date"
+                      <CustomDatePicker
                         value={endDate}
-                        min={startDate || undefined}
-                        onChange={(e) => setEndDate(e.target.value)}
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-medium focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
+                        minDate={startDate || undefined}
+                        onChange={(val) => setEndDate(val)}
+                        placeholder="Select end date"
+                        align="right"
                       />
                     </div>
                   </div>
@@ -634,12 +617,10 @@ export default function EventDetailsView({
 
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-slate-700">Daily Schedule / Working Hours</label>
-                  <input
-                    type="text"
+                  <CustomSchedulePicker
                     value={scheduleTime}
-                    onChange={(e) => setScheduleTime(e.target.value)}
-                    placeholder="e.g. 09:00 AM – 05:30 PM (CET)"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-medium placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
+                    onChange={(val) => setScheduleTime(val)}
+                    placeholder="e.g. 09:00 AM – 05:30 PM"
                   />
                 </div>
 
@@ -690,19 +671,9 @@ export default function EventDetailsView({
                       type="button"
                       onClick={() => bannerFileInputRef.current?.click()}
                       disabled={uploadingBanner}
-                      className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                      className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition-colors cursor-pointer shadow-xs disabled:opacity-50"
                     >
-                      {uploadingBanner ? (
-                        <>
-                          <Loader2 size={12} className="animate-spin" />
-                          <span>Uploading...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Upload size={12} />
-                          <span>Upload Desktop Image</span>
-                        </>
-                      )}
+                      {uploadingBanner ? "Uploading..." : "Upload Desktop Image"}
                     </button>
                   </div>
 
@@ -748,19 +719,9 @@ export default function EventDetailsView({
                       type="button"
                       onClick={() => galleryFileInputRef.current?.click()}
                       disabled={uploadingGallery}
-                      className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                      className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors cursor-pointer shadow-xs disabled:opacity-50"
                     >
-                      {uploadingGallery ? (
-                        <>
-                          <Loader2 size={11} className="animate-spin" />
-                          <span>Uploading...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Plus size={13} />
-                          <span>Upload Photo</span>
-                        </>
-                      )}
+                      {uploadingGallery ? "Uploading..." : "Upload Photo"}
                     </button>
                   </div>
 
@@ -797,10 +758,10 @@ export default function EventDetailsView({
                         <button
                           type="button"
                           onClick={() => handleRemoveGalleryImage(idx)}
-                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer shrink-0"
+                          className="px-2 py-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl font-bold text-sm transition-colors cursor-pointer shrink-0"
                           title="Remove photo"
                         >
-                          <Trash2 size={14} />
+                          ×
                         </button>
                       </div>
                     ))}
@@ -890,11 +851,7 @@ export default function EventDetailsView({
                 No manual saving needed
               </span>
             </div>
-
           </div>
-
         </div>
-      </div>
-    </div>
-  );
+    );
 }

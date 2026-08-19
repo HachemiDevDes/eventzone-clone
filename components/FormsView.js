@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { 
   FileText, Plus, Search, Filter, Sparkles, Check, 
   Trash2, Copy, ExternalLink, Eye, Settings, Share2, 
@@ -9,7 +9,8 @@ import {
   ListChecks, MessageSquare, HelpCircle, Send, Smartphone, 
   Monitor, Star, ToggleLeft, ToggleRight, CheckSquare, 
   Radio, Calendar, Hash, Type, AlignLeft, Mail, Phone,
-  QrCode, Award, UserCheck, AlertCircle, X, Layers, RefreshCw
+  QrCode, Award, UserCheck, AlertCircle, X, Layers, RefreshCw,
+  Lock, Archive, RotateCcw
 } from "lucide-react";
 import QRCode from "qrcode";
 
@@ -29,6 +30,59 @@ const FIELD_TYPES = [
   { type: "section", label: "Section Header", icon: Layers, description: "Section title and description divider", category: "Layout" },
 ];
 
+// Core identity fields that are permanently locked and required in every form
+export const CORE_LOCKED_FIELDS = [
+  {
+    id: "f_core_name",
+    type: "text",
+    label: "Full Name",
+    placeholder: "e.g. Alex Morgan",
+    required: true,
+    isLocked: true,
+    options: []
+  },
+  {
+    id: "f_core_email",
+    type: "email",
+    label: "Email Address",
+    placeholder: "alex@company.com",
+    required: true,
+    isLocked: true,
+    options: []
+  },
+  {
+    id: "f_core_phone",
+    type: "text",
+    label: "Phone Number",
+    placeholder: "+1 (555) 000-0000",
+    required: true,
+    isLocked: true,
+    options: []
+  }
+];
+
+export function ensureCoreLockedFields(fields = []) {
+  const current = Array.isArray(fields) ? [...fields] : [];
+  
+  const hasName = current.some(f => f.id === "f_core_name" || (f.isLocked && f.label?.toLowerCase().includes("name")));
+  const hasEmail = current.some(f => f.id === "f_core_email" || (f.isLocked && f.type === "email"));
+  const hasPhone = current.some(f => f.id === "f_core_phone" || (f.isLocked && f.label?.toLowerCase().includes("phone")));
+
+  const missing = [];
+  if (!hasName) missing.push({ ...CORE_LOCKED_FIELDS[0] });
+  if (!hasEmail) missing.push({ ...CORE_LOCKED_FIELDS[1] });
+  if (!hasPhone) missing.push({ ...CORE_LOCKED_FIELDS[2] });
+
+  const sanitized = current.map(f => {
+    if (f.id === "f_core_name" || f.id === "f_core_email" || f.id === "f_core_phone") {
+      return { ...f, isLocked: true, required: true };
+    }
+    return f;
+  });
+
+  return [...missing, ...sanitized];
+}
+
 const PRESET_TEMPLATES = [
   {
     id: "tpl_ticket_reg",
@@ -37,6 +91,7 @@ const PRESET_TEMPLATES = [
     type: "ticket_registration",
     category: "Ticket Registration",
     fields: [
+      ...CORE_LOCKED_FIELDS,
       { id: "f_job", type: "text", label: "Job Title / Role", placeholder: "e.g. Chief Legal Officer", required: true, options: [] },
       { id: "f_comp", type: "text", label: "Organization / Company", placeholder: "e.g. Energy Partners Ltd.", required: true, options: [] },
       { id: "f_track", type: "select", label: "Primary Interest Track", required: true, options: ["Green Hydrogen Infrastructure", "Energy Law & Policy", "Project Financing & Bilateral Offtake", "Port Logistics"] },
@@ -52,6 +107,7 @@ const PRESET_TEMPLATES = [
     type: "feedback_survey",
     category: "Feedback & Survey",
     fields: [
+      ...CORE_LOCKED_FIELDS,
       { id: "f_overall", type: "rating", label: "Overall Event Experience", helpText: "1 = Poor, 5 = Outstanding", maxRating: 5, required: true, options: [] },
       { id: "f_content", type: "rating", label: "Keynotes & Content Quality", helpText: "Relevance, depth, and presentation value", maxRating: 5, required: true, options: [] },
       { id: "f_venue", type: "rating", label: "Venue Facilities & Organization", helpText: "Logistics, check-in flow, and catering", maxRating: 5, required: false, options: [] },
@@ -67,6 +123,7 @@ const PRESET_TEMPLATES = [
     type: "session_survey",
     category: "Session Reviews",
     fields: [
+      ...CORE_LOCKED_FIELDS,
       { id: "f_spk_rating", type: "rating", label: "Speaker Presentation Score", maxRating: 5, required: true, options: [] },
       { id: "f_topic_depth", type: "select", label: "Technical Depth of the Talk", required: true, options: ["Too Introductory", "Just Right / Balanced", "Very Advanced"] },
       { id: "f_takeaways", type: "textarea", label: "Key Learnings & Notes", placeholder: "What will you apply in your work?", required: false, options: [] },
@@ -80,8 +137,7 @@ const PRESET_TEMPLATES = [
     type: "general_inquiry",
     category: "Call for Speakers",
     fields: [
-      { id: "f_spk_name", type: "text", label: "Presenter Full Name", placeholder: "Dr. Full Name", required: true, options: [] },
-      { id: "f_spk_email", type: "email", label: "Contact Email Address", placeholder: "speaker@domain.com", required: true, options: [] },
+      ...CORE_LOCKED_FIELDS,
       { id: "f_talk_title", type: "text", label: "Proposed Presentation Title", placeholder: "Clear, engaging talk title...", required: true, options: [] },
       { id: "f_abstract", type: "textarea", label: "Abstract / Synopsis (250-500 words)", placeholder: "Overview of findings and audience value...", required: true, options: [] },
       { id: "f_bio", type: "textarea", label: "Speaker Biography & Previous Talks", placeholder: "Brief bio and video/presentation links...", required: true, options: [] }
@@ -94,9 +150,8 @@ const PRESET_TEMPLATES = [
     type: "general_inquiry",
     category: "Sponsorship",
     fields: [
+      ...CORE_LOCKED_FIELDS,
       { id: "f_sp_company", type: "text", label: "Company / Brand Name", required: true, options: [] },
-      { id: "f_sp_contact", type: "text", label: "Contact Person & Title", required: true, options: [] },
-      { id: "f_sp_email", type: "email", label: "Work Email", required: true, options: [] },
       { id: "f_sp_tier", type: "select", label: "Target Sponsorship Tier", required: true, options: ["Platinum Title Partner ($25,000)", "Gold Track Sponsor ($15,000)", "Silver Booth Exhibitor ($7,500)", "Networking Reception Sponsor ($5,000)"] },
       { id: "f_sp_goals", type: "checkbox", label: "Main Objectives", required: false, options: ["Brand Visibility & PR", "Direct B2B Lead Generation", "Executive Networking", "Talent Recruitment"] }
     ]
@@ -109,6 +164,8 @@ export default function FormsView({
   tickets = [],
   onSaveForm,
   onDeleteForm,
+  onArchiveForm,
+  onRestoreForm,
   onSubmitResponse,
   activeEventTitle = "Eventzone Conference"
 }) {
@@ -136,8 +193,36 @@ export default function FormsView({
   const [previewAnswers, setPreviewAnswers] = useState({});
   const [previewSubmitted, setPreviewSubmitted] = useState(false);
 
+  const onSaveFormRef = useRef(onSaveForm);
+  useEffect(() => {
+    onSaveFormRef.current = onSaveForm;
+  }, [onSaveForm]);
+
+  const saveTimeoutRef = useRef(null);
+  const lastSavedJsonRef = useRef(null);
+
   // Selected Submission Detail Modal
   const [inspectSubmission, setInspectSubmission] = useState(null);
+
+  // Real-time automatic background synchronization of form changes
+  useEffect(() => {
+    if (!editingForm) return;
+    const currentJson = JSON.stringify(editingForm);
+    if (lastSavedJsonRef.current === currentJson) return;
+
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+
+    saveTimeoutRef.current = setTimeout(() => {
+      lastSavedJsonRef.current = currentJson;
+      if (onSaveFormRef.current) {
+        onSaveFormRef.current(editingForm);
+      }
+    }, 400);
+
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, [editingForm]);
 
   // Submissions for active form
   const activeSubmissions = useMemo(() => {
@@ -147,10 +232,12 @@ export default function FormsView({
 
   // Global KPIs across all forms
   const stats = useMemo(() => {
-    const total = forms.length;
-    const activeCount = forms.filter(f => f.status === "active").length;
-    const ticketForms = forms.filter(f => f.type === "ticket_registration").length;
-    const feedbackForms = forms.filter(f => f.type === "feedback_survey" || f.type === "session_survey").length;
+    const nonArchived = forms.filter(f => f.status !== "archived" && !f.isArchived);
+    const archivedCount = forms.filter(f => f.status === "archived" || f.isArchived).length;
+    const total = nonArchived.length;
+    const activeCount = nonArchived.filter(f => f.status === "active").length;
+    const ticketForms = nonArchived.filter(f => f.type === "ticket_registration").length;
+    const feedbackForms = nonArchived.filter(f => f.type === "feedback_survey" || f.type === "session_survey").length;
     const totalSubs = submissions.length;
 
     // Calculate average rating across all feedback forms
@@ -169,12 +256,13 @@ export default function FormsView({
       ? (ratingValues.reduce((a, b) => a + b, 0) / ratingValues.length).toFixed(1)
       : "4.8";
 
-    return { total, activeCount, ticketForms, feedbackForms, totalSubs, avgRating, totalRatings: ratingValues.length };
+    return { total, activeCount, archivedCount, ticketForms, feedbackForms, totalSubs, avgRating, totalRatings: ratingValues.length };
   }, [forms, submissions]);
 
   // Filtered forms in Hub
   const filteredForms = useMemo(() => {
     return forms.filter(form => {
+      const isArchived = form.status === "archived" || form.isArchived;
       const matchesSearch = (form.title || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
                             (form.description || "").toLowerCase().includes(searchQuery.toLowerCase());
       
@@ -184,7 +272,10 @@ export default function FormsView({
       else if (selectedCategory === "Inquiries & Proposals") matchesCat = form.type === "general_inquiry";
 
       let matchesStatus = true;
-      if (selectedStatus !== "All") matchesStatus = form.status === selectedStatus.toLowerCase();
+      if (selectedStatus === "All") matchesStatus = !isArchived;
+      else if (selectedStatus === "Archived") matchesStatus = isArchived;
+      else if (selectedStatus === "Active") matchesStatus = !isArchived && form.status === "active";
+      else if (selectedStatus === "Draft") matchesStatus = !isArchived && form.status === "draft";
 
       return matchesSearch && matchesCat && matchesStatus;
     });
@@ -205,29 +296,13 @@ export default function FormsView({
         allowAnonymous: false,
         accentColor: "blue"
       },
-      fields: [
-        {
-          id: `field_${Date.now()}_1`,
-          type: "text",
-          label: "Your Full Name",
-          placeholder: "Enter full name...",
-          required: true,
-          options: []
-        },
-        {
-          id: `field_${Date.now()}_2`,
-          type: "email",
-          label: "Email Address",
-          placeholder: "name@company.com",
-          required: true,
-          options: []
-        }
-      ]
+      fields: ensureCoreLockedFields([])
     };
     setEditingForm(newForm);
     setActiveFormId(newForm.id);
     setViewMode("builder");
     setBuilderTab("fields");
+    if (onSaveForm) onSaveForm(newForm);
   };
 
   const handleOpenTemplate = (template) => {
@@ -244,20 +319,25 @@ export default function FormsView({
         allowAnonymous: template.type === "feedback_survey",
         accentColor: template.type === "ticket_registration" ? "blue" : "indigo"
       },
-      fields: template.fields.map((f, idx) => ({
+      fields: ensureCoreLockedFields(template.fields.map((f, idx) => ({
         ...f,
-        id: `f_${Date.now()}_${idx}`
-      }))
+        id: f.id.startsWith("f_core_") ? f.id : `f_${Date.now()}_${idx}`
+      })))
     };
     setEditingForm(newForm);
     setActiveFormId(newForm.id);
     setTemplateModalOpen(false);
     setViewMode("builder");
     setBuilderTab("fields");
+    if (onSaveForm) onSaveForm(newForm);
   };
 
   const handleEditForm = (form) => {
-    setEditingForm(JSON.parse(JSON.stringify(form)));
+    const sanitizedForm = {
+      ...JSON.parse(JSON.stringify(form)),
+      fields: ensureCoreLockedFields(form.fields)
+    };
+    setEditingForm(sanitizedForm);
     setActiveFormId(form.id);
     setViewMode("builder");
     setBuilderTab("fields");
@@ -312,15 +392,30 @@ export default function FormsView({
   const handleUpdateField = (fieldId, updates) => {
     setEditingForm(prev => ({
       ...prev,
-      fields: (prev.fields || []).map(f => f.id === fieldId ? { ...f, ...updates } : f)
+      fields: (prev.fields || []).map(f => {
+        if (f.id !== fieldId) return f;
+        const isLocked = f.isLocked || ["f_core_name", "f_core_email", "f_core_phone"].includes(fieldId);
+        return {
+          ...f,
+          ...updates,
+          required: isLocked ? true : (updates.required !== undefined ? updates.required : f.required),
+          isLocked: isLocked
+        };
+      })
     }));
   };
 
   const handleDeleteField = (fieldId) => {
-    setEditingForm(prev => ({
-      ...prev,
-      fields: (prev.fields || []).filter(f => f.id !== fieldId)
-    }));
+    setEditingForm(prev => {
+      const fieldToDelete = (prev.fields || []).find(f => f.id === fieldId);
+      if (fieldToDelete?.isLocked || ["f_core_name", "f_core_email", "f_core_phone"].includes(fieldId)) {
+        return prev; // Core identity fields cannot be deleted
+      }
+      return {
+        ...prev,
+        fields: (prev.fields || []).filter(f => f.id !== fieldId)
+      };
+    });
   };
 
   const handleMoveField = (index, direction) => {
@@ -451,8 +546,8 @@ export default function FormsView({
     if (onSubmitResponse && editingForm) {
       onSubmitResponse({
         formId: editingForm.id,
-        respondentName: "Preview Test User",
-        respondentEmail: "test@eventzone.io",
+        respondentName: previewAnswers["f_core_name"] || "Preview Test User",
+        respondentEmail: previewAnswers["f_core_email"] || "test@eventzone.io",
         ticketTier: editingForm.ticketId === "all" ? "Standard Admission" : editingForm.ticketId,
         answers: previewAnswers
       });
@@ -464,64 +559,53 @@ export default function FormsView({
   // =========================================================================
   if (viewMode === "builder" && editingForm) {
     return (
-      <div className="flex flex-col gap-6 max-w-6xl mx-auto pb-16 animate-fade-in">
+      <div className="flex flex-col gap-6 w-full pb-16 animate-fade-in">
         {/* Top Sticky Header */}
-        <header className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs flex flex-wrap items-center justify-between gap-4 sticky top-4 z-40">
+        <header className="bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-3xl px-6 py-4 shadow-xs flex flex-wrap items-center justify-between gap-4 sticky top-4 z-40">
+          {/* Left: Form Title & Meta Info */}
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => {
-                handleSaveCurrentForm();
-                setViewMode("hub");
-              }}
-              className="p-2.5 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors flex items-center gap-1.5 text-xs font-bold"
-            >
-              <ArrowLeft size={16} />
-              <span>Back to Forms</span>
-            </button>
-            <div className="h-6 w-px bg-slate-200" />
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 <input
                   type="text"
                   value={editingForm.title}
                   onChange={(e) => setEditingForm(prev => ({ ...prev, title: e.target.value }))}
-                  className="text-lg font-extrabold text-slate-900 bg-transparent hover:bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 rounded-lg px-2 py-0.5 outline-none transition-all"
+                  className="text-base sm:text-lg font-bold text-slate-900 bg-transparent hover:bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 rounded-xl px-2 py-0.5 outline-none transition-all"
+                  placeholder="Untitled Form"
                 />
-                <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full ${
-                  editingForm.type === "ticket_registration" ? "bg-emerald-100 text-emerald-700" :
-                  editingForm.type === "feedback_survey" ? "bg-violet-100 text-violet-700" :
-                  editingForm.type === "session_survey" ? "bg-amber-100 text-amber-700" :
-                  "bg-blue-100 text-blue-700"
+                <span className={`text-[10px] font-extrabold uppercase tracking-wide px-2.5 py-0.5 rounded-full shrink-0 ${
+                  editingForm.type === "ticket_registration" ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60" :
+                  editingForm.type === "feedback_survey" ? "bg-violet-50 text-violet-700 border border-violet-200/60" :
+                  editingForm.type === "session_survey" ? "bg-amber-50 text-amber-700 border border-amber-200/60" :
+                  "bg-blue-50 text-blue-700 border border-blue-200/60"
                 }`}>
                   {editingForm.type.replace(/_/g, " ")}
                 </span>
               </div>
-              <p className="text-xs text-slate-400 font-medium px-2">
+              <p className="text-[11px] text-slate-400 font-medium px-2 mt-0.5">
                 {editingForm.fields?.length || 0} Questions · {activeSubmissions.length} Submissions Received
               </p>
             </div>
           </div>
 
-          {/* Builder Navigation Tabs */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-2xl">
+          {/* Center: Builder Navigation Tabs */}
+          <div className="flex items-center bg-slate-100/90 p-1 rounded-2xl border border-slate-200/60">
             <button
               onClick={() => setBuilderTab("fields")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 builderTab === "fields" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <ListChecks size={14} />
-              <span>Questions Builder</span>
+              Questions Builder
             </button>
 
             <button
               onClick={() => setBuilderTab("settings")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 builderTab === "settings" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <Settings size={14} />
-              <span>Form Settings</span>
+              Form Settings
             </button>
 
             <button
@@ -530,45 +614,32 @@ export default function FormsView({
                 setPreviewSubmitted(false);
                 setPreviewAnswers({});
               }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 builderTab === "preview" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <Eye size={14} />
-              <span>Live Simulator</span>
+              Live Simulator
             </button>
 
             <button
               onClick={() => setBuilderTab("submissions")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 builderTab === "submissions" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <BarChart2 size={14} />
-              <span>Responses ({activeSubmissions.length})</span>
+              Responses ({activeSubmissions.length})
             </button>
           </div>
 
-          {/* Save & Share Actions */}
+          {/* Right: Share & QR Action */}
           <div className="flex items-center gap-2">
             <button
               onClick={() => handleOpenShare(editingForm)}
-              className="p-2.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold flex items-center gap-1.5 transition-colors"
+              className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shadow-2xs"
               title="Share / QR Code"
             >
               <Share2 size={14} />
               <span>Share & QR</span>
-            </button>
-
-            <button
-              onClick={() => {
-                handleSaveCurrentForm();
-                alert("Form changes saved successfully!");
-              }}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-blue-600/20 transition-all cursor-pointer"
-            >
-              <Check size={14} />
-              <span>Save Form</span>
             </button>
           </div>
         </header>
@@ -596,27 +667,27 @@ export default function FormsView({
                   <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">
                     {cat} Elements
                   </span>
-                  <div className="grid grid-cols-1 gap-1.5">
+                  <div className="grid grid-cols-1 gap-2">
                     {FIELD_TYPES.filter(t => t.category === cat).map(ft => {
-                      const IconComp = ft.icon;
+                      const IconComponent = ft.icon;
                       return (
                         <button
                           key={ft.type}
                           onClick={() => handleAddField(ft.type)}
-                          className="flex items-center gap-3 p-2.5 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/40 text-left transition-all group cursor-pointer"
+                          className="flex items-center gap-3 p-3 rounded-2xl border border-slate-100 hover:border-blue-300 hover:bg-blue-50/40 text-left transition-all group cursor-pointer shadow-2xs hover:shadow-xs"
                         >
-                          <div className="p-2 rounded-lg bg-slate-100 text-slate-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                            <IconComp size={15} />
+                          <div className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-200/70 flex items-center justify-center text-slate-500 group-hover:text-blue-600 group-hover:bg-blue-50 group-hover:border-blue-200 transition-all shrink-0">
+                            {IconComponent && <IconComponent size={15} />}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="text-xs font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
                               {ft.label}
                             </div>
-                            <div className="text-[10px] text-slate-400 truncate">
+                            <div className="text-[10px] text-slate-400 truncate mt-0.5">
                               {ft.description}
                             </div>
                           </div>
-                          <Plus size={14} className="text-slate-300 group-hover:text-blue-600 shrink-0" />
+                          <Plus size={14} className="text-slate-300 group-hover:text-blue-600 transition-colors shrink-0" />
                         </button>
                       );
                     })}
@@ -648,39 +719,49 @@ export default function FormsView({
               </div>
 
               {/* Questions List */}
-              {(editingForm.fields || []).length === 0 ? (
-                <div className="bg-white border-2 border-dashed border-slate-200 rounded-3xl p-12 text-center flex flex-col items-center gap-4">
+              {editingForm.fields?.length === 0 ? (
+                <div className="bg-white border-2 border-dashed border-slate-200 rounded-3xl p-12 text-center flex flex-col items-center gap-3">
                   <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                    <FileText size={24} />
+                    <ListChecks size={24} />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-slate-800">No questions added yet</h4>
-                    <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                      Select elements from the toolbox on the left to start building your questions and feedback prompts.
+                    <h4 className="text-sm font-bold text-slate-900">Your form has no questions yet</h4>
+                    <p className="text-xs text-slate-400 mt-1 max-w-xs">
+                      Choose an element from the toolbox on the left to start building your questions.
                     </p>
                   </div>
                 </div>
               ) : (
                 editingForm.fields.map((field, index) => {
-                  const typeDef = FIELD_TYPES.find(t => t.type === field.type) || FIELD_TYPES[0];
-                  const IconComp = typeDef.icon;
+                  const ftObj = FIELD_TYPES.find(t => t.type === field.type) || { label: field.type };
+                  const FieldIcon = ftObj.icon;
                   const isChoice = ["select", "radio", "checkbox"].includes(field.type);
+                  const isLockedField = field.isLocked || ["f_core_name", "f_core_email", "f_core_phone"].includes(field.id);
 
                   return (
                     <div
                       key={field.id}
-                      className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs hover:border-slate-300 transition-all flex flex-col gap-4 group"
+                      className={`bg-white border rounded-3xl p-6 shadow-xs transition-all flex flex-col gap-4 relative group ${
+                        isLockedField ? "border-blue-200/90 bg-blue-50/15" : "border-slate-200 hover:border-slate-300"
+                      }`}
                     >
-                      {/* Card Header: Type, Position, Action Buttons */}
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                        <div className="flex items-center gap-2.5">
-                          <span className="w-6 h-6 rounded-lg bg-slate-100 text-slate-600 font-extrabold text-[11px] flex items-center justify-center">
+                      {/* Top Field Badge & Controls */}
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <span className="w-6 h-6 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center">
                             {index + 1}
                           </span>
-                          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 text-xs font-bold">
-                            <IconComp size={13} />
-                            <span>{typeDef.label}</span>
-                          </div>
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-blue-50 text-blue-700 font-bold text-xs">
+                            {FieldIcon && <FieldIcon size={12} />}
+                            <span>{ftObj.label}</span>
+                          </span>
+
+                          {isLockedField && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-[10px] font-extrabold uppercase tracking-wider">
+                              <Lock size={10} />
+                              <span>Core Required</span>
+                            </span>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-1">
@@ -688,60 +769,55 @@ export default function FormsView({
                           <button
                             onClick={() => handleMoveField(index, -1)}
                             disabled={index === 0}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 text-xs font-bold cursor-pointer transition-colors"
                             title="Move Up"
                           >
-                            <ChevronUp size={15} />
+                            <ChevronUp size={14} />
                           </button>
                           <button
                             onClick={() => handleMoveField(index, 1)}
                             disabled={index === editingForm.fields.length - 1}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 text-xs font-bold cursor-pointer transition-colors"
                             title="Move Down"
                           >
-                            <ChevronDown size={15} />
+                            <ChevronDown size={14} />
                           </button>
 
                           <div className="h-4 w-px bg-slate-200 mx-1" />
 
-                          {/* Delete Field */}
-                          <button
-                            onClick={() => handleDeleteField(field.id)}
-                            className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 cursor-pointer transition-colors"
-                            title="Delete Question"
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                          {/* Delete Field / Locked State */}
+                          {isLockedField ? (
+                            <span
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-400 px-2 py-1 select-none"
+                              title="This core attendee identity field is required across all forms and cannot be deleted"
+                            >
+                              <Lock size={12} className="text-blue-500" />
+                              <span>Locked</span>
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleDeleteField(field.id)}
+                              className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 cursor-pointer font-bold text-xs transition-colors"
+                              title="Delete Question"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </div>
                       </div>
 
-                      {/* Question Label & Help Text Inputs */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                            Question Title / Label <span className="text-rose-500">*</span>
-                          </label>
-                          <input
-                            type="text"
-                            value={field.label}
-                            onChange={(e) => handleUpdateField(field.id, { label: e.target.value })}
-                            placeholder="e.g. Dietary Requirements or Keynote Rating"
-                            className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-bold text-slate-900 outline-none transition-all"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                            Helper Text / Subtitle
-                          </label>
-                          <input
-                            type="text"
-                            value={field.helpText || ""}
-                            onChange={(e) => handleUpdateField(field.id, { helpText: e.target.value })}
-                            placeholder="Optional instructions for attendee..."
-                            className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-semibold text-slate-700 outline-none transition-all"
-                          />
-                        </div>
+                      {/* Question Label Input */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                          Question Title / Label <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={field.label}
+                          onChange={(e) => handleUpdateField(field.id, { label: e.target.value })}
+                          placeholder="e.g. Dietary Requirements or Keynote Rating"
+                          className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-bold text-slate-900 outline-none transition-all"
+                        />
                       </div>
 
                       {/* Choice Options Manager (for select, radio, checkbox) */}
@@ -765,9 +841,9 @@ export default function FormsView({
                                 {(field.options || []).length > 1 && (
                                   <button
                                     onClick={() => handleDeleteOption(field.id, optIdx)}
-                                    className="p-1 text-slate-400 hover:text-rose-600 rounded-md hover:bg-slate-100"
+                                    className="px-1.5 py-0.5 text-slate-400 hover:text-rose-600 font-bold text-sm rounded-md hover:bg-slate-100"
                                   >
-                                    <X size={14} />
+                                    ×
                                   </button>
                                 )}
                               </div>
@@ -775,9 +851,9 @@ export default function FormsView({
                           </div>
                           <button
                             onClick={() => handleAddOption(field.id)}
-                            className="self-start text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 mt-1 cursor-pointer"
+                            className="self-start text-xs font-bold text-blue-600 hover:text-blue-700 mt-1 cursor-pointer"
                           >
-                            <Plus size={13} /> Add Another Choice
+                            Add Another Choice
                           </button>
                         </div>
                       )}
@@ -792,7 +868,7 @@ export default function FormsView({
                             type="text"
                             value={field.placeholder || ""}
                             onChange={(e) => handleUpdateField(field.id, { placeholder: e.target.value })}
-                            placeholder="e.g. Enter your job title..."
+                            placeholder="e.g. Enter your details..."
                             className="w-full px-3.5 py-1.5 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-medium text-slate-700 outline-none transition-all"
                           />
                         </div>
@@ -812,14 +888,24 @@ export default function FormsView({
                           <label className="flex items-center gap-2 cursor-pointer select-none">
                             <input
                               type="checkbox"
-                              checked={field.required}
-                              onChange={(e) => handleUpdateField(field.id, { required: e.target.checked })}
-                              className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+                              checked={isLockedField ? true : (field.required ?? false)}
+                              disabled={isLockedField}
+                              onChange={(e) => !isLockedField && handleUpdateField(field.id, { required: e.target.checked })}
+                              className={`rounded text-blue-600 focus:ring-blue-500 h-4 w-4 ${
+                                isLockedField ? "opacity-70 cursor-not-allowed" : "cursor-pointer"
+                              }`}
                             />
-                            <span className="text-xs font-bold text-slate-700">Required Question</span>
+                            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                              <span>Required Question</span>
+                              {isLockedField && (
+                                <span className="text-[10px] text-blue-600 font-semibold">(Mandatory Core Input)</span>
+                              )}
+                            </span>
                           </label>
                           <span className="text-[11px] text-slate-400 font-medium">
-                            {field.required ? "Attendee must answer before submission" : "Optional for attendee"}
+                            {isLockedField 
+                              ? "Core mandatory requirement for all submissions"
+                              : (field.required ? "Attendee must answer before submission" : "Optional for attendee")}
                           </span>
                         </div>
                       )}
@@ -957,21 +1043,19 @@ export default function FormsView({
             <div className="bg-slate-100 p-1.5 rounded-2xl flex items-center gap-1 shadow-xs">
               <button
                 onClick={() => setPreviewDevice("desktop")}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   previewDevice === "desktop" ? "bg-white text-blue-600 shadow-xs" : "text-slate-500"
                 }`}
               >
-                <Monitor size={14} />
-                <span>Desktop Screen</span>
+                Desktop Screen
               </button>
               <button
                 onClick={() => setPreviewDevice("mobile")}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   previewDevice === "mobile" ? "bg-white text-blue-600 shadow-xs" : "text-slate-500"
                 }`}
               >
-                <Smartphone size={14} />
-                <span>Mobile Device (375px)</span>
+                Mobile Device (375px)
               </button>
             </div>
 
@@ -982,8 +1066,8 @@ export default function FormsView({
               <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-xl flex flex-col gap-6">
                 {previewSubmitted ? (
                   <div className="text-center py-10 flex flex-col items-center gap-4 animate-scale-up">
-                    <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
-                      <Check size={28} />
+                    <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold text-xl">
+                      ✓
                     </div>
                     <div>
                       <h3 className="text-lg font-bold text-slate-900">Submission Successful</h3>
@@ -996,9 +1080,9 @@ export default function FormsView({
                         setPreviewSubmitted(false);
                         setPreviewAnswers({});
                       }}
-                      className="text-xs font-bold text-blue-600 hover:text-blue-700 mt-2 flex items-center gap-1.5"
+                      className="text-xs font-bold text-blue-600 hover:text-blue-700 mt-2 cursor-pointer"
                     >
-                      <RefreshCw size={13} /> Test Again
+                      Test Again
                     </button>
                   </div>
                 ) : (
@@ -1016,61 +1100,63 @@ export default function FormsView({
                       )}
                     </div>
 
-                    {/* Dynamic Fields Simulator */}
+                    {/* Question Rendering */}
                     {(editingForm.fields || []).map(field => {
                       if (field.type === "section") {
                         return (
-                          <div key={field.id} className="pt-3 border-t border-slate-100">
-                            <h4 className="text-sm font-bold text-slate-900">{field.label}</h4>
-                            {field.helpText && <p className="text-xs text-slate-400 mt-0.5">{field.helpText}</p>}
+                          <div key={field.id} className="pt-4 border-t border-slate-100">
+                            <h3 className="text-sm font-bold text-slate-900">{field.label}</h3>
+                            {field.helpText && (
+                              <p className="text-xs text-slate-400 mt-0.5">{field.helpText}</p>
+                            )}
                           </div>
                         );
                       }
 
                       return (
-                        <div key={field.id} className="flex flex-col gap-1.5 text-left">
-                          <label className="text-xs font-bold text-slate-800 flex items-center justify-between">
-                            <span>
-                              {field.label} {field.required && <span className="text-rose-500">*</span>}
-                            </span>
+                        <div key={field.id} className="flex flex-col gap-1.5">
+                          <label className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                            <span>{field.label}</span>
+                            {field.required && <span className="text-rose-500">*</span>}
                           </label>
+
                           {field.helpText && (
-                            <span className="text-[11px] text-slate-400 font-medium -mt-1">
+                            <span className="text-[11px] text-slate-400 -mt-0.5 mb-1 font-medium">
                               {field.helpText}
                             </span>
                           )}
 
-                          {/* Short Text / Email / Number */}
-                          {["text", "email", "number"].includes(field.type) && (
+                          {/* Short text / Number / Email / Date */}
+                          {["text", "number", "email", "date"].includes(field.type) && (
                             <input
                               type={field.type}
-                              required={field.required}
-                              placeholder={field.placeholder || "Your answer..."}
                               value={previewAnswers[field.id] || ""}
                               onChange={(e) => setPreviewAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
+                              placeholder={field.placeholder || ""}
+                              required={field.required}
                               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-semibold text-slate-900 outline-none transition-all"
                             />
                           )}
 
-                          {/* Paragraph / Textarea */}
+                          {/* Textarea */}
                           {field.type === "textarea" && (
                             <textarea
-                              required={field.required}
                               rows={3}
-                              placeholder={field.placeholder || "Enter detailed feedback..."}
                               value={previewAnswers[field.id] || ""}
                               onChange={(e) => setPreviewAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
-                              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-medium text-slate-900 outline-none transition-all"
+                              placeholder={field.placeholder || ""}
+                              required={field.required}
+                              className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-medium text-slate-900 outline-none transition-all resize-none"
                             />
                           )}
 
                           {/* Dropdown Select */}
                           {field.type === "select" && (
                             <select
-                              required={field.required}
                               value={previewAnswers[field.id] || ""}
                               onChange={(e) => setPreviewAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
-                              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-semibold text-slate-900 outline-none cursor-pointer"
+                              required={field.required}
+                              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-blue-600 rounded-xl text-xs font-semibold text-slate-800 outline-none"
                             >
                               <option value="">Select an option...</option>
                               {(field.options || []).map((opt, i) => (
@@ -1079,17 +1165,18 @@ export default function FormsView({
                             </select>
                           )}
 
-                          {/* Radio Choices */}
+                          {/* Radio Single Choice */}
                           {field.type === "radio" && (
                             <div className="flex flex-col gap-2 mt-1">
                               {(field.options || []).map((opt, i) => (
-                                <label key={i} className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-slate-50 cursor-pointer transition-colors">
+                                <label key={i} className="flex items-center gap-2.5 cursor-pointer">
                                   <input
                                     type="radio"
-                                    name={field.id}
-                                    required={field.required}
+                                    name={`preview_${field.id}`}
+                                    value={opt}
                                     checked={previewAnswers[field.id] === opt}
                                     onChange={() => setPreviewAnswers(prev => ({ ...prev, [field.id]: opt }))}
+                                    required={field.required && !previewAnswers[field.id]}
                                     className="text-blue-600 focus:ring-blue-500 h-4 w-4"
                                   />
                                   <span className="text-xs font-semibold text-slate-800">{opt}</span>
@@ -1098,14 +1185,14 @@ export default function FormsView({
                             </div>
                           )}
 
-                          {/* Checkboxes */}
+                          {/* Checkbox Multi-Select */}
                           {field.type === "checkbox" && (
                             <div className="flex flex-col gap-2 mt-1">
                               {(field.options || []).map((opt, i) => {
                                 const currentVals = previewAnswers[field.id] || [];
                                 const isChecked = currentVals.includes(opt);
                                 return (
-                                  <label key={i} className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-slate-50 cursor-pointer transition-colors">
+                                  <label key={i} className="flex items-center gap-2.5 cursor-pointer">
                                     <input
                                       type="checkbox"
                                       checked={isChecked}
@@ -1163,7 +1250,7 @@ export default function FormsView({
                                       type="button"
                                       key={score}
                                       onClick={() => setPreviewAnswers(prev => ({ ...prev, [field.id]: score }))}
-                                      className={`w-8 h-8 rounded-xl font-bold text-xs transition-all ${
+                                      className={`w-8 h-8 rounded-xl font-bold text-xs transition-all cursor-pointer ${
                                         isSelected
                                           ? "bg-blue-600 text-white shadow-md shadow-blue-600/30 scale-110"
                                           : "bg-slate-100 hover:bg-slate-200 text-slate-700"
@@ -1233,10 +1320,9 @@ export default function FormsView({
                 <button
                   onClick={handleExportCSV}
                   disabled={activeSubmissions.length === 0}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-50 text-slate-800 rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                  className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-50 text-slate-800 rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
                 >
-                  <Download size={14} className="text-blue-600" />
-                  <span>Export CSV</span>
+                  Export CSV
                 </button>
               </div>
             </div>
@@ -1288,7 +1374,7 @@ export default function FormsView({
                     <div className="text-3xl font-extrabold text-slate-900 mt-2">{activeSubmissions.length}</div>
                   </div>
                   <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1 mt-4">
-                    <Check size={14} /> 100% submission integrity
+                    100% submission integrity
                   </span>
                 </div>
               </div>
@@ -1366,9 +1452,9 @@ export default function FormsView({
                 </div>
                 <button
                   onClick={() => setInspectSubmission(null)}
-                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
+                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 font-bold cursor-pointer"
                 >
-                  <X size={16} />
+                  ✕
                 </button>
               </div>
 
@@ -1430,12 +1516,12 @@ export default function FormsView({
   // VIEW MODE: HUB (All Forms Overview, Template Library, Stat Cards)
   // =========================================================================
   return (
-    <div className="flex flex-col gap-8 max-w-6xl mx-auto pb-16 animate-fade-in">
+    <div className="flex flex-col gap-8 w-full pb-16 animate-fade-in">
       {/* Top Header */}
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Forms & Surveys Builder</h2>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-sm text-slate-500">
             Build custom ticket registration intake questionnaires, feedback CSAT forms, and speaker proposals.
           </p>
         </div>
@@ -1443,18 +1529,16 @@ export default function FormsView({
         <div className="flex items-center gap-2.5">
           <button
             onClick={() => setTemplateModalOpen(true)}
-            className="flex items-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold py-2.5 px-4 rounded-xl text-xs shadow-xs transition-colors cursor-pointer"
+            className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold py-2.5 px-4 rounded-xl text-xs shadow-xs transition-colors cursor-pointer"
           >
-            <Sparkles size={14} className="text-indigo-600" />
-            <span>Templates Library</span>
+            Templates Library
           </button>
 
           <button
             onClick={handleOpenCreateBlank}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer"
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer"
           >
-            <Plus size={15} />
-            <span>Create Form</span>
+            Create Form
           </button>
         </div>
       </header>
@@ -1532,21 +1616,39 @@ export default function FormsView({
           />
         </div>
 
-        {/* Category Filter Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto">
-          {["All", "Ticket Registration", "Feedback & Survey", "Inquiries & Proposals"].map(cat => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                selectedCategory === cat
-                  ? "bg-slate-900 text-white shadow-xs"
-                  : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
+        {/* Category & Status Filter Pills */}
+        <div className="flex items-center gap-3 overflow-x-auto flex-wrap">
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+            {["All", "Active", "Draft", "Archived"].map(st => (
+              <button
+                key={st}
+                onClick={() => setSelectedStatus(st)}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  selectedStatus === st
+                    ? st === "Archived" ? "bg-slate-700 text-white shadow-xs" : "bg-white text-slate-900 shadow-xs"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                {st} {st === "Archived" ? `(${stats.archivedCount})` : st === "Active" ? `(${stats.activeCount})` : ""}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            {["All", "Ticket Registration", "Feedback & Survey", "Inquiries & Proposals"].map(cat => (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  selectedCategory === cat
+                    ? "bg-slate-900 text-white shadow-xs"
+                    : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -1557,21 +1659,28 @@ export default function FormsView({
             <FileText size={26} />
           </div>
           <div>
-            <h3 className="text-base font-bold text-slate-900">No forms found</h3>
+            <h3 className="text-base font-bold text-slate-900">
+              {selectedStatus === "Archived" ? "No archived forms" : "No forms found"}
+            </h3>
             <p className="text-xs text-slate-400 mt-1 max-w-sm">
-              Create a custom form or explore our templates library to start collecting responses.
+              {selectedStatus === "Archived" 
+                ? "Archived forms will appear here safely preserved." 
+                : "Create a custom form or explore our templates library to start collecting responses."}
             </p>
           </div>
-          <button
-            onClick={() => setTemplateModalOpen(true)}
-            className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-bold text-xs shadow-md shadow-blue-600/20"
-          >
-            Explore Pre-built Templates
-          </button>
+          {selectedStatus !== "Archived" && (
+            <button
+              onClick={() => setTemplateModalOpen(true)}
+              className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-bold text-xs shadow-md shadow-blue-600/20 cursor-pointer"
+            >
+              Explore Pre-built Templates
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredForms.map(form => {
+            const isArchived = form.status === "archived" || form.isArchived;
             const formSubs = submissions.filter(s => s.formId === form.id);
             const isTicket = form.type === "ticket_registration";
             const isFeedback = form.type === "feedback_survey" || form.type === "session_survey";
@@ -1579,7 +1688,7 @@ export default function FormsView({
             return (
               <div
                 key={form.id}
-                className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs hover:shadow-md hover:border-slate-300 transition-all flex flex-col justify-between gap-5 group"
+                className={`bg-white border ${isArchived ? "border-slate-300 opacity-75" : "border-slate-200"} rounded-3xl p-6 shadow-xs hover:shadow-md hover:border-slate-300 transition-all flex flex-col justify-between gap-5 group`}
               >
                 {/* Header info */}
                 <div className="flex flex-col gap-3">
@@ -1593,9 +1702,10 @@ export default function FormsView({
                     </span>
 
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                      isArchived ? "bg-slate-200 text-slate-700 font-extrabold" :
                       form.status === "active" ? "bg-emerald-50 text-emerald-700 font-extrabold" : "bg-slate-100 text-slate-500"
                     }`}>
-                      {form.status === "active" ? "● Active" : "Draft"}
+                      {isArchived ? "Archived" : form.status === "active" ? "● Active" : "Draft"}
                     </span>
                   </div>
 
@@ -1616,49 +1726,69 @@ export default function FormsView({
                 </div>
 
                 {/* Card Actions */}
-                <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-4">
+                <div className="flex items-center justify-between gap-1.5 border-t border-slate-100 pt-4">
                   <button
                     onClick={() => handleEditForm(form)}
-                    className="flex-1 py-2 px-3 bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white rounded-xl text-xs font-bold transition-all text-center cursor-pointer"
+                    className="flex-1 py-1.5 px-2.5 bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white rounded-xl text-xs font-bold transition-all text-center cursor-pointer"
                   >
-                    Edit Questions
+                    Edit
                   </button>
 
                   <button
                     onClick={() => handleViewResponses(form)}
-                    className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                    className="px-2.5 py-1.5 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 font-bold text-xs transition-colors cursor-pointer"
                     title="View Responses & Analytics"
                   >
-                    <BarChart2 size={16} />
+                    Analytics
                   </button>
 
-                  <button
-                    onClick={() => handleOpenShare(form)}
-                    className="p-2 rounded-xl text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
-                    title="Share / QR Code"
-                  >
-                    <QrCode size={16} />
-                  </button>
+                  {!isArchived && (
+                    <button
+                      onClick={() => handleOpenShare(form)}
+                      className="px-2.5 py-1.5 rounded-xl text-slate-500 hover:text-blue-600 hover:bg-blue-50 font-bold text-xs transition-colors cursor-pointer"
+                      title="Share / QR Code"
+                    >
+                      Share
+                    </button>
+                  )}
 
-                  <button
-                    onClick={() => handleDuplicateForm(form)}
-                    className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-                    title="Duplicate Form"
-                  >
-                    <Copy size={16} />
-                  </button>
+                  {!isArchived && (
+                    <button
+                      onClick={() => handleDuplicateForm(form)}
+                      className="px-2.5 py-1.5 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 font-bold text-xs transition-colors cursor-pointer"
+                      title="Duplicate Form"
+                    >
+                      Duplicate
+                    </button>
+                  )}
 
-                  <button
-                    onClick={() => {
-                      if (confirm(`Are you sure you want to delete "${form.title}"?`)) {
-                        onDeleteForm(form.id);
-                      }
-                    }}
-                    className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                    title="Delete Form"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  {isArchived ? (
+                    <button
+                      onClick={() => {
+                        if (onSaveForm) onSaveForm({ ...form, status: "active", isArchived: false });
+                        else if (onRestoreForm) onRestoreForm(form.id);
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl text-emerald-600 hover:bg-emerald-50 font-bold text-xs transition-colors cursor-pointer flex items-center gap-1"
+                      title="Restore Form"
+                    >
+                      <RotateCcw size={12} />
+                      <span>Restore</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        if (confirm(`Archive "${form.title}"? (Form and submission records safely preserved in archives)`)) {
+                          if (onArchiveForm) onArchiveForm(form.id);
+                          else if (onDeleteForm) onDeleteForm(form.id);
+                        }
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl text-slate-500 hover:text-amber-600 hover:bg-amber-50 font-bold text-xs transition-colors cursor-pointer flex items-center gap-1"
+                      title="Archive Form"
+                    >
+                      <Archive size={12} />
+                      <span>Archive</span>
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -1674,9 +1804,8 @@ export default function FormsView({
           <div className="bg-white border border-slate-200 rounded-3xl p-7 max-w-2xl w-full shadow-2xl flex flex-col gap-6 animate-scale-up max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
-                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                  <Sparkles size={18} className="text-indigo-600" />
-                  <span>Choose a Form Template</span>
+                <h3 className="text-lg font-bold text-slate-900">
+                  Choose a Form Template
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
                   Select a pre-designed template tailored for events, tickets, and feedback collection.
@@ -1684,9 +1813,9 @@ export default function FormsView({
               </div>
               <button
                 onClick={() => setTemplateModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 font-bold cursor-pointer"
               >
-                <X size={16} />
+                ✕
               </button>
             </div>
 
@@ -1714,19 +1843,12 @@ export default function FormsView({
                     </span>
                   </div>
 
-                  <button className="px-3.5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold shadow-xs group-hover:scale-105 transition-transform shrink-0">
+                  <button className="px-3.5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold shadow-xs group-hover:scale-105 transition-transform shrink-0 cursor-pointer">
                     Use Template
                   </button>
                 </div>
               ))}
             </div>
-
-            <button
-              onClick={() => setTemplateModalOpen(false)}
-              className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
           </div>
         </div>
       )}
@@ -1744,9 +1866,9 @@ export default function FormsView({
               </div>
               <button
                 onClick={() => setShareModalForm(null)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 font-bold cursor-pointer"
               >
-                <X size={16} />
+                ✕
               </button>
             </div>
 
@@ -1767,9 +1889,8 @@ export default function FormsView({
             {/* Share Link Copy */}
             <button
               onClick={handleCopyShareLink}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-md shadow-blue-600/20 transition-all flex items-center justify-center cursor-pointer"
             >
-              {copiedLink ? <Check size={16} /> : <Share2 size={16} />}
               <span>{copiedLink ? "Link Copied to Clipboard!" : "Copy Direct Public Link"}</span>
             </button>
           </div>

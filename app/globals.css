@@ -1,8 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: 'Plus Jakarta Sans', sans-serif;
+  --font-cairo: 'Cairo', sans-serif;
   
   --color-indigo-650: #0b5cdb;
   --color-indigo-700: #094eb8;
@@ -13,8 +14,19 @@
   --color-slate-250: #cbd5e1;
   --color-slate-450: #94a3b8;
 
+  --radius-xs: 8px;
+  --radius-sm: 8px;
+  --radius-md: 8px;
+  --radius-lg: 8px;
+  --radius-xl: 8px;
+  --radius-2xl: 8px;
+  --radius-3xl: 8px;
+  --radius-4xl: 8px;
+  --radius: 8px;
+
   --animate-fade-in: fadeIn 0.2s ease-out forwards;
   --animate-scale-up: scaleUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  --animate-slide-in-right: slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @keyframes fadeIn {
@@ -27,6 +39,11 @@
   to { transform: scale(1); opacity: 1; }
 }
 
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
 /* Custom Scrollbar Utilities */
 .scrollbar-none::-webkit-scrollbar {
   display: none;
@@ -37,10 +54,129 @@
 }
 
 body, button, input, textarea, select, span, div, h1, h2, h3, h4, h5, h6, a, p, label {
-  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+/* Arabic typography: Cairo Font */
+html[lang="ar"],
+html[dir="rtl"],
+[lang="ar"],
+[dir="rtl"],
+[dir="rtl"] body,
+[dir="rtl"] button,
+[dir="rtl"] input,
+[dir="rtl"] textarea,
+[dir="rtl"] select,
+[dir="rtl"] span,
+[dir="rtl"] div,
+[dir="rtl"] h1,
+[dir="rtl"] h2,
+[dir="rtl"] h3,
+[dir="rtl"] h4,
+[dir="rtl"] h5,
+[dir="rtl"] h6,
+[dir="rtl"] a,
+[dir="rtl"] p,
+[dir="rtl"] label,
+.font-cairo {
+  font-family: 'Cairo', 'Plus Jakarta Sans', sans-serif !important;
 }
 
 body {
   background-color: #f8fafc;
   color: #0f172a;
+}
+
+/* 8px smooth edge radius across cards, containers, inputs, tables, tabs, etc. */
+.rounded,
+.rounded-sm,
+.rounded-md,
+.rounded-lg,
+.rounded-xl,
+.rounded-2xl,
+.rounded-3xl,
+.rounded-4xl {
+  border-radius: 8px !important;
+}
+
+.rounded-t,
+.rounded-t-sm,
+.rounded-t-md,
+.rounded-t-lg,
+.rounded-t-xl,
+.rounded-t-2xl,
+.rounded-t-3xl {
+  border-top-left-radius: 8px !important;
+  border-top-right-radius: 8px !important;
+}
+
+.rounded-b,
+.rounded-b-sm,
+.rounded-b-md,
+.rounded-b-lg,
+.rounded-b-xl,
+.rounded-b-2xl,
+.rounded-b-3xl {
+  border-bottom-left-radius: 8px !important;
+  border-bottom-right-radius: 8px !important;
+}
+
+.rounded-l,
+.rounded-l-sm,
+.rounded-l-md,
+.rounded-l-lg,
+.rounded-l-xl,
+.rounded-l-2xl,
+.rounded-l-3xl {
+  border-top-left-radius: 8px !important;
+  border-bottom-left-radius: 8px !important;
+}
+
+.rounded-r,
+.rounded-r-sm,
+.rounded-r-md,
+.rounded-r-lg,
+.rounded-r-xl,
+.rounded-r-2xl,
+.rounded-r-3xl {
+  border-top-right-radius: 8px !important;
+  border-bottom-right-radius: 8px !important;
+}
+
+/* Fully rounded edge radius for obvious blue primary action CTA buttons only */
+button.bg-blue-600,
+button.bg-blue-700,
+button.bg-indigo-600,
+button.bg-indigo-650,
+button.bg-indigo-700,
+a.bg-blue-600,
+a.bg-blue-700,
+a.bg-indigo-600,
+a.bg-indigo-650,
+.btn-primary,
+button[class*="bg-blue-600"],
+button[class*="bg-indigo-650"] {
+  border-radius: 9999px !important;
+}
+
+/* Left panel sidebar tabs: strictly 8px smooth edge radius */
+aside button,
+aside button.bg-blue-600,
+aside button[class*="bg-blue-600"],
+nav button,
+nav button.bg-blue-600,
+nav button[class*="bg-blue-600"],
+aside .rounded-2xl,
+aside .rounded-xl {
+  border-radius: 8px !important;
+}
+
+/* Tab changer & filter segment buttons: strictly 8px smooth edge radius */
+div[class*="border"] > button,
+div[class*="bg-slate"] > button,
+div[class*="bg-white"] > button,
+div[class*="rounded"] > button,
+[role="tab"],
+.tab-button {
+  border-radius: 8px !important;
 }

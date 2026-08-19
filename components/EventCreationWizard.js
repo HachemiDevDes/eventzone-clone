@@ -1,13 +1,18 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { 
   Sparkles, Calendar, MapPin, Building2, 
   Image as ImageIcon, Users, ArrowRight, ArrowLeft, 
   CheckCircle2, X, Globe, Video, LayoutDashboard, Layers,
-  ChevronRight, Compass, ShieldCheck, Tag, Info, Clock, Check, Link as LinkIcon
+  ChevronRight, Compass, ShieldCheck, Tag, Info, Clock, Check, Link as LinkIcon,
+  Upload, Loader2, Trash2, Camera, RefreshCw, ChevronDown
 } from "lucide-react";
+import { uploadFileToBucket } from "../lib/db";
+import { useLanguage } from "../lib/i18n";
+import CustomDatePicker from "./CustomDatePicker";
+import CustomTimePicker from "./CustomTimePicker";
 
 const PRESET_BANNERS = [
   {
@@ -64,7 +69,10 @@ const TIMEZONES = [
   { id: "UTC", name: "UTC (Coordinated Universal Time)", offset: "GMT+0", time: "12:08 PM now" }
 ];
 
-export default function EventCreationWizard({ onCancel, onEventCreated, userId }) {
+export default function EventCreationWizard({ onCancel, onEventCreated, userId, onUploadFile }) {
+  const { t, lang, setLang, isRTL, languages } = useLanguage();
+  const [langMenuOpen, setLangMenuOpen] = useState(false);
+
   // Current screen state:
   // "1A": Event Name input
   // "1B": Describe "{Event Name}"? (Professional / Community / Personal) [SCREENSHOT 1]
@@ -76,6 +84,11 @@ export default function EventCreationWizard({ onCancel, onEventCreated, userId }
   // "3":  Account information & Final Launch
   const [currentScreen, setCurrentScreen] = useState("1A");
   const [loading, setLoading] = useState(false);
+
+  // File Upload State
+  const fileInputRef = useRef(null);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
+  const [isCustomBanner, setIsCustomBanner] = useState(false);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -101,6 +114,58 @@ export default function EventCreationWizard({ onCancel, onEventCreated, userId }
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleBannerUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert("Please upload a valid image file (PNG, JPG, WebP, SVG)");
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      alert("File size exceeds 10MB limit. Please choose a smaller image.");
+      return;
+    }
+
+    setUploadingBanner(true);
+    try {
+      let publicUrl = null;
+      if (onUploadFile) {
+        publicUrl = await onUploadFile(file, 'floor-plans');
+      } else {
+        publicUrl = await uploadFileToBucket(file, 'floor-plans');
+      }
+
+      if (!publicUrl) {
+        publicUrl = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(file);
+        });
+      }
+
+      if (publicUrl) {
+        handleChange("banner", publicUrl);
+        setIsCustomBanner(true);
+      }
+    } catch (err) {
+      console.error("Banner upload failed:", err);
+      try {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          handleChange("banner", reader.result);
+          setIsCustomBanner(true);
+        };
+        reader.readAsDataURL(file);
+      } catch (readErr) {
+        alert("Failed to process image upload.");
+      }
+    } finally {
+      setUploadingBanner(false);
+    }
   };
 
   // Determine top stepper main step number (1, 2, or 3)
@@ -223,10 +288,9 @@ export default function EventCreationWizard({ onCancel, onEventCreated, userId }
 
           <button
             onClick={onCancel}
-            className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-900 transition-colors p-1.5 rounded-xl hover:bg-slate-100 cursor-pointer"
+            className="text-xs font-bold text-slate-500 hover:text-slate-900 transition-colors p-1.5 rounded-xl hover:bg-slate-100 cursor-pointer"
           >
-            <ArrowLeft size={15} />
-            <span>Cancel</span>
+            Cancel
           </button>
         </div>
 
@@ -291,13 +355,56 @@ export default function EventCreationWizard({ onCancel, onEventCreated, userId }
           </div>
         </div>
 
-        {/* Right Exit Button */}
+        {/* Right Actions: Language Switcher & Exit Button */}
         <div className="flex items-center gap-2">
+          {/* Language Selector */}
+          <div className="relative">
+            {(() => {
+              const curLang = languages.find(l => l.code === lang) || languages[0];
+              return (
+                <button
+                  onClick={() => setLangMenuOpen(o => !o)}
+                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all cursor-pointer shadow-xs"
+                  title="Change Language"
+                >
+                  <img src={curLang?.icon || "https://i.imgur.com/NXtMImD.png"} alt={lang} className="w-5 h-5 object-contain shrink-0" />
+                  <span className="uppercase tracking-wide font-extrabold text-[11px]">{lang}</span>
+                  <ChevronDown size={11} className={`text-slate-400 transition-transform ${langMenuOpen ? "rotate-180" : ""}`} />
+                </button>
+              );
+            })()}
+
+            {langMenuOpen && (
+              <div className="absolute top-full right-0 mt-1.5 w-36 bg-white border border-slate-200 rounded-xl shadow-xl p-1 z-50 animate-scale-up space-y-0.5">
+                {languages.map(item => (
+                  <button
+                    key={item.code}
+                    onClick={() => {
+                      setLang(item.code);
+                      setLangMenuOpen(false);
+                    }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                      lang === item.code 
+                        ? "bg-blue-50 text-blue-600 font-bold" 
+                        : "text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <img src={item.icon} alt={item.code} className="w-5 h-5 object-contain shrink-0" />
+                      <span>{item.label}</span>
+                    </div>
+                    {lang === item.code && <Check size={12} className="text-blue-600 shrink-0" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <button
             onClick={onCancel}
-            className="text-slate-400 hover:text-slate-600 p-2 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+            className="text-slate-400 hover:text-slate-600 p-2 rounded-xl hover:bg-slate-100 transition-colors font-bold cursor-pointer"
           >
-            <X size={18} />
+            ✕
           </button>
         </div>
       </header>
@@ -347,10 +454,9 @@ export default function EventCreationWizard({ onCancel, onEventCreated, userId }
 
                 <button
                   type="submit"
-                  className="px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-blue-600/30 transition-all flex items-center gap-2 cursor-pointer"
+                  className="px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-blue-600/30 transition-all cursor-pointer"
                 >
-                  <span>Continue</span>
-                  <ArrowRight size={15} />
+                  Continue
                 </button>
               </div>
             </form>
@@ -413,19 +519,17 @@ export default function EventCreationWizard({ onCancel, onEventCreated, userId }
               <button
                 type="button"
                 onClick={handleBack}
-                className="px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5"
+                className="px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 font-bold text-xs transition-all cursor-pointer"
               >
-                <ArrowLeft size={14} />
-                <span>Back</span>
+                Back
               </button>
 
               <button
                 type="button"
                 onClick={() => handleNextFrom1B(formData.eventTypeCategory)}
-                className="px-7 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-md shadow-blue-600/30 transition-all flex items-center gap-2 cursor-pointer"
+                className="px-7 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-md shadow-blue-600/30 transition-all cursor-pointer"
               >
-                <span>Next: Event details</span>
-                <ArrowRight size={14} />
+                Next: Event details
               </button>
             </div>
           </div>
@@ -487,19 +591,17 @@ export default function EventCreationWizard({ onCancel, onEventCreated, userId }
               <button
                 type="button"
                 onClick={handleBack}
-                className="px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5"
+                className="px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 font-bold text-xs transition-all cursor-pointer"
               >
-                <ArrowLeft size={14} />
-                <span>Back</span>
+                Back
               </button>
 
               <button
                 type="button"
                 onClick={() => handleNextFrom2A(formData.structureType)}
-                className="px-7 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-md shadow-blue-600/30 transition-all flex items-center gap-2 cursor-pointer"
+                className="px-7 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-md shadow-blue-600/30 transition-all cursor-pointer"
               >
-                <span>Next: Dates & Timing</span>
-                <ArrowRight size={14} />
+                Next: Dates & Timing
               </button>
             </div>
           </div>
@@ -532,25 +634,17 @@ export default function EventCreationWizard({ onCancel, onEventCreated, userId }
                   Event Start
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="relative">
-                    <Calendar size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                    <input
-                      type="date"
-                      value={formData.startDate}
-                      onChange={(e) => handleChange("startDate", e.target.value)}
-                      className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-2xl text-xs font-semibold text-slate-800 outline-none transition-all cursor-pointer"
-                    />
-                  </div>
+                  <CustomDatePicker
+                    value={formData.startDate}
+                    onChange={(val) => handleChange("startDate", val)}
+                    placeholder="Start date"
+                  />
 
-                  <div className="relative">
-                    <Clock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                    <input
-                      type="time"
-                      value={formData.startTime}
-                      onChange={(e) => handleChange("startTime", e.target.value)}
-                      className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-2xl text-xs font-semibold text-slate-800 outline-none transition-all cursor-pointer"
-                    />
-                  </div>
+                  <CustomTimePicker
+                    value={formData.startTime}
+                    onChange={(val) => handleChange("startTime", val)}
+                    placeholder="Start time"
+                  />
                 </div>
               </div>
 
@@ -560,25 +654,18 @@ export default function EventCreationWizard({ onCancel, onEventCreated, userId }
                   Event End
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="relative">
-                    <Calendar size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                    <input
-                      type="date"
-                      value={formData.endDate}
-                      onChange={(e) => handleChange("endDate", e.target.value)}
-                      className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-2xl text-xs font-semibold text-slate-800 outline-none transition-all cursor-pointer"
-                    />
-                  </div>
+                  <CustomDatePicker
+                    value={formData.endDate}
+                    minDate={formData.startDate || undefined}
+                    onChange={(val) => handleChange("endDate", val)}
+                    placeholder="End date"
+                  />
 
-                  <div className="relative">
-                    <Clock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                    <input
-                      type="time"
-                      value={formData.endTime}
-                      onChange={(e) => handleChange("endTime", e.target.value)}
-                      className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-2xl text-xs font-semibold text-slate-800 outline-none transition-all cursor-pointer"
-                    />
-                  </div>
+                  <CustomTimePicker
+                    value={formData.endTime}
+                    onChange={(val) => handleChange("endTime", val)}
+                    placeholder="End time"
+                  />
                 </div>
               </div>
 
@@ -607,10 +694,9 @@ export default function EventCreationWizard({ onCancel, onEventCreated, userId }
               <button
                 type="button"
                 onClick={handleNextFrom2B}
-                className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold text-xs shadow-lg shadow-blue-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer mt-4"
+                className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold text-xs shadow-lg shadow-blue-600/30 transition-all flex items-center justify-center cursor-pointer mt-4"
               >
-                <span>Next: Event Location</span>
-                <ArrowRight size={15} />
+                Next: Event Location
               </button>
             </div>
 
@@ -618,10 +704,9 @@ export default function EventCreationWizard({ onCancel, onEventCreated, userId }
               <button
                 type="button"
                 onClick={handleBack}
-                className="px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5"
+                className="px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 font-bold text-xs transition-all cursor-pointer"
               >
-                <ArrowLeft size={14} />
-                <span>Back</span>
+                Back
               </button>
             </div>
           </div>
@@ -689,10 +774,9 @@ export default function EventCreationWizard({ onCancel, onEventCreated, userId }
               <button
                 type="button"
                 onClick={handleNextFrom2C}
-                className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold text-xs shadow-lg shadow-blue-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer mt-4"
+                className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold text-xs shadow-lg shadow-blue-600/30 transition-all flex items-center justify-center cursor-pointer mt-4"
               >
-                <span>Next: Category & Banner</span>
-                <ArrowRight size={15} />
+                Next: Category & Banner
               </button>
             </div>
 
@@ -700,10 +784,9 @@ export default function EventCreationWizard({ onCancel, onEventCreated, userId }
               <button
                 type="button"
                 onClick={handleBack}
-                className="px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5"
+                className="px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 font-bold text-xs transition-all cursor-pointer"
               >
-                <ArrowLeft size={14} />
-                <span>Back</span>
+                Back
               </button>
             </div>
           </div>
@@ -738,24 +821,151 @@ export default function EventCreationWizard({ onCancel, onEventCreated, userId }
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2.5">
-                  Select Event Cover Banner
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {PRESET_BANNERS.map((preset) => (
-                    <div
-                      key={preset.url}
-                      onClick={() => handleChange("banner", preset.url)}
-                      className={`h-24 rounded-2xl overflow-hidden relative cursor-pointer border-2 transition-all group ${
-                        formData.banner === preset.url ? "border-blue-600 ring-4 ring-blue-100 scale-102" : "border-slate-200 opacity-70 hover:opacity-100"
-                      }`}
-                    >
-                      <img src={preset.url} alt={preset.name} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent flex items-end p-2">
-                        <span className="text-[10px] font-bold text-white leading-tight truncate">{preset.name}</span>
+                <div className="flex items-center justify-between mb-2.5">
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                    Event Cover Banner
+                  </label>
+                  {isCustomBanner && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold">
+                      Custom Photo Loaded
+                    </span>
+                  )}
+                </div>
+
+                {/* Hidden File Input */}
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept="image/png, image/jpeg, image/webp, image/svg+xml"
+                  onChange={handleBannerUpload}
+                  className="hidden"
+                />
+
+                {/* Main Custom Upload Box */}
+                <div className="space-y-3">
+                  {isCustomBanner && formData.banner ? (
+                    <div className="relative rounded-2xl overflow-hidden border-2 border-blue-600 shadow-md group">
+                      <div className="h-44 w-full relative bg-slate-950">
+                        <img 
+                          src={formData.banner} 
+                          alt="Custom Event Cover" 
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent flex items-end p-4">
+                          <div>
+                            <span className="px-2 py-0.5 rounded-md bg-blue-600 text-white text-[9px] font-extrabold uppercase">
+                              Active Event Banner
+                            </span>
+                            <h4 className="text-sm font-bold text-white mt-1">
+                              {formData.title || "Your Event Title"}
+                            </h4>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action Bar */}
+                      <div className="bg-slate-900 px-4 py-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-xs text-slate-300">
+                          <CheckCircle2 size={15} className="text-emerald-400" />
+                          <span className="font-semibold">Ready to save &amp; sync to database</span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={uploadingBanner}
+                            className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-900 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
+                          >
+                            Replace Photo
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleChange("banner", PRESET_BANNERS[0].url);
+                              setIsCustomBanner(false);
+                            }}
+                            className="px-2.5 py-1.5 bg-slate-800 hover:bg-rose-500/20 hover:text-rose-400 text-slate-400 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+                            title="Reset to starter preset"
+                          >
+                            Reset
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  ))}
+                  ) : (
+                    <div 
+                      onClick={() => !uploadingBanner && fileInputRef.current?.click()}
+                      className="border-2 border-dashed border-slate-300 hover:border-blue-500 bg-slate-50 hover:bg-blue-50/40 rounded-2xl p-6 text-center cursor-pointer transition-all group relative overflow-hidden"
+                    >
+                      {uploadingBanner ? (
+                        <div className="flex flex-col items-center justify-center py-4 space-y-2">
+                          <Loader2 size={28} className="text-blue-600 animate-spin" />
+                          <span className="text-xs font-bold text-slate-700">Uploading to Cloud Storage...</span>
+                          <span className="text-[11px] text-slate-400">Optimizing and storing banner asset</span>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="w-12 h-12 rounded-2xl bg-blue-100/80 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-all flex items-center justify-center mx-auto shadow-xs">
+                            <Upload size={22} />
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold text-slate-900 block group-hover:text-blue-600 transition-colors">
+                              Click or Drag &amp; Drop Your Custom Event Picture
+                            </span>
+                            <span className="text-[11px] text-slate-400 block mt-1">
+                              Supports PNG, JPG, WebP, SVG up to 10MB (Recommended: 16:9 ratio, 1600x900px)
+                            </span>
+                          </div>
+                          <div className="pt-1">
+                            <span className="inline-flex items-center px-3 py-1.5 bg-white border border-slate-200 group-hover:border-blue-300 rounded-xl text-xs font-bold text-slate-700 shadow-2xs">
+                              Browse Files on Computer
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Preset Banners Alternative */}
+                  <div className="pt-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        Or pick from curated templates
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                      {PRESET_BANNERS.map((preset) => {
+                        const isSelected = !isCustomBanner && formData.banner === preset.url;
+                        return (
+                          <div
+                            key={preset.url}
+                            onClick={() => {
+                              handleChange("banner", preset.url);
+                              setIsCustomBanner(false);
+                            }}
+                            className={`h-20 rounded-xl overflow-hidden relative cursor-pointer border-2 transition-all group ${
+                              isSelected 
+                                ? "border-blue-600 ring-3 ring-blue-100 scale-102" 
+                                : "border-slate-200 opacity-60 hover:opacity-100 hover:border-slate-300"
+                            }`}
+                          >
+                            <img src={preset.url} alt={preset.name} className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent flex items-end p-1.5">
+                              <span className="text-[9px] font-bold text-white leading-tight truncate">{preset.name}</span>
+                            </div>
+                            {isSelected && (
+                              <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-xs">
+                                <Check size={10} />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -779,10 +989,9 @@ export default function EventCreationWizard({ onCancel, onEventCreated, userId }
               <button
                 type="button"
                 onClick={handleNextFrom2D}
-                className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold text-xs shadow-lg shadow-blue-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer mt-4"
+                className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold text-xs shadow-lg shadow-blue-600/30 transition-all flex items-center justify-center cursor-pointer mt-4"
               >
-                <span>Next: Customize URL</span>
-                <ArrowRight size={15} />
+                Next: Customize URL
               </button>
             </div>
 
@@ -790,10 +999,9 @@ export default function EventCreationWizard({ onCancel, onEventCreated, userId }
               <button
                 type="button"
                 onClick={handleBack}
-                className="px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5"
+                className="px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 font-bold text-xs transition-all cursor-pointer"
               >
-                <ArrowLeft size={14} />
-                <span>Back</span>
+                Back
               </button>
             </div>
           </div>
@@ -847,10 +1055,9 @@ export default function EventCreationWizard({ onCancel, onEventCreated, userId }
               <button
                 type="button"
                 onClick={handleNextFrom2E}
-                className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold text-xs shadow-lg shadow-blue-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer mt-4"
+                className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold text-xs shadow-lg shadow-blue-600/30 transition-all flex items-center justify-center cursor-pointer mt-4"
               >
-                <span>Next: Create Account</span>
-                <ArrowRight size={15} />
+                Next: Create Account
               </button>
             </div>
 
@@ -858,10 +1065,9 @@ export default function EventCreationWizard({ onCancel, onEventCreated, userId }
               <button
                 type="button"
                 onClick={handleBack}
-                className="px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5"
+                className="px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 font-bold text-xs transition-all cursor-pointer"
               >
-                <ArrowLeft size={14} />
-                <span>Back</span>
+                Back
               </button>
             </div>
           </div>
@@ -970,25 +1176,21 @@ export default function EventCreationWizard({ onCancel, onEventCreated, userId }
               <button
                 type="button"
                 onClick={handleBack}
-                className="px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5"
+                className="px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 font-bold text-xs transition-all cursor-pointer"
               >
-                <ArrowLeft size={14} />
-                <span>Back</span>
+                Back
               </button>
 
               <button
                 type="button"
                 disabled={loading}
                 onClick={handleSubmit}
-                className="px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-blue-600/30 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                className="px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-blue-600/30 transition-all cursor-pointer disabled:opacity-50"
               >
                 {loading ? (
                   <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                 ) : (
-                  <>
-                    <span>Create Event & Launch Dashboard</span>
-                    <Sparkles size={15} />
-                  </>
+                  "Create Event & Launch Dashboard"
                 )}
               </button>
             </div>

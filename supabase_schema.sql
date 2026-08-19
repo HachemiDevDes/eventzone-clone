@@ -221,7 +221,47 @@ CREATE TABLE IF NOT EXISTS public.form_submissions (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 16. Configure Row Level Security (RLS) Permissive Policies for Web App Access
+-- 16. RSVPs Table (Attendance & Headcount Management)
+CREATE TABLE IF NOT EXISTS public.rsvps (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  event_id UUID REFERENCES public.events(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  full_name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  phone TEXT,
+  company TEXT,
+  job_title TEXT,
+  status TEXT NOT NULL DEFAULT 'attending', -- 'attending', 'declined', 'waitlisted', 'tentative'
+  plus_ones INTEGER DEFAULT 0,
+  plus_ones_names JSONB DEFAULT '[]'::jsonb,
+  dietary_preference TEXT DEFAULT 'None', -- 'None', 'Vegetarian', 'Vegan', 'Halal', 'Kosher', 'Gluten-Free', 'Dairy-Free', 'Nut Allergy', 'Other'
+  dietary_notes TEXT,
+  notes TEXT,
+  checked_in BOOLEAN DEFAULT FALSE,
+  checked_in_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 17. RSVP Settings Table (Per-event Capacity, Deadline & Plus-ones Config)
+CREATE TABLE IF NOT EXISTS public.rsvp_settings (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  event_id UUID REFERENCES public.events(id) ON DELETE CASCADE UNIQUE,
+  is_enabled BOOLEAN DEFAULT TRUE,
+  capacity_limit INTEGER DEFAULT 150,
+  allow_plus_ones BOOLEAN DEFAULT TRUE,
+  max_plus_ones INTEGER DEFAULT 2,
+  allow_waitlist BOOLEAN DEFAULT TRUE,
+  deadline TIMESTAMPTZ,
+  collect_dietary BOOLEAN DEFAULT TRUE,
+  collect_company BOOLEAN DEFAULT TRUE,
+  collect_phone BOOLEAN DEFAULT TRUE,
+  confirmation_message TEXT DEFAULT 'Thank you for your RSVP! We look forward to seeing you at the event.',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 18. Configure Row Level Security (RLS) Permissive Policies for Web App Access
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sessions ENABLE ROW LEVEL SECURITY;
@@ -236,6 +276,8 @@ ALTER TABLE public.floor_plans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.communications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.forms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.form_submissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rsvps ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rsvp_settings ENABLE ROW LEVEL SECURITY;
 
 DO $$ 
 DECLARE
@@ -243,7 +285,7 @@ DECLARE
 BEGIN
   FOR tbl IN 
     SELECT tablename FROM pg_tables WHERE schemaname = 'public' 
-    AND tablename IN ('profiles', 'events', 'sessions', 'participants', 'pending_registrations', 'organizations', 'sponsors', 'exhibitors', 'tickets', 'team_members', 'floor_plans', 'communications', 'forms', 'form_submissions')
+    AND tablename IN ('profiles', 'events', 'sessions', 'participants', 'pending_registrations', 'organizations', 'sponsors', 'exhibitors', 'tickets', 'team_members', 'floor_plans', 'communications', 'forms', 'form_submissions', 'rsvps', 'rsvp_settings')
   LOOP
     EXECUTE format('DROP POLICY IF EXISTS "Public access policy" ON public.%I;', tbl);
     EXECUTE format('CREATE POLICY "Public access policy" ON public.%I FOR ALL USING (true) WITH CHECK (true);', tbl);

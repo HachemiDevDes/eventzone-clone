@@ -1,22 +1,23 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
+import dynamic from "next/dynamic";
 import { 
-  CheckCircle2, Ticket, ShieldAlert, 
-  ChevronDown, LayoutDashboard, Calendar, 
-  Users2, BarChart3, X, Globe, Map, Sparkles, Upload, Mail,
+  CheckCircle2, Ticket, ShieldAlert, ShieldCheck,
+  ChevronDown, LayoutDashboard, Calendar, Clock,
+  Users2, UserCheck, BarChart3, X, Globe, Map, Sparkles, Upload, Mail,
   Building2, Plus, ArrowLeft, ArrowRight, Layers, LogOut, Compass, ExternalLink, ChevronRight, Home as HomeIcon, User,
-  FileText
+  FileText, ClipboardList, QrCode, Store, Mic2, Check
 } from "lucide-react";
 
 import MainHomePage from "../components/MainHomePage";
 import Overview from "../components/Overview";
 import CalendarView from "../components/CalendarView";
-import FloorPlanModifier from "../components/FloorPlanModifier";
+const FloorPlanModifier = dynamic(() => import("../components/FloorPlanModifier"), { ssr: false });
 import FloorPlanGallery from "../components/FloorPlanGallery";
 import GenericTableView from "../components/GenericTableView";
-import LivePageBuilder from "../components/LivePageBuilder";
+const LivePageBuilder = dynamic(() => import("../components/LivePageBuilder"), { ssr: false });
 import EventDetailsView from "../components/EventDetailsView";
 import AuthView from "../components/AuthView";
 import OrganizerEventsHub from "../components/OrganizerEventsHub";
@@ -24,25 +25,32 @@ import EventCreationWizard from "../components/EventCreationWizard";
 import VisitorPortal from "../components/VisitorPortal";
 import EventPublicLandingPage from "../components/EventPublicLandingPage";
 import ProfileView from "../components/ProfileView";
+import MyTicketsPage from "../components/MyTicketsPage";
 import FormsView from "../components/FormsView";
+import RSVPView from "../components/RSVPView";
+import PublicRSVPModal from "../components/PublicRSVPModal";
+import TicketDrawer from "../components/TicketDrawer";
+import { LanguageProvider, useLanguage } from "../lib/i18n";
 
 import {
   fetchEventDetails, updateEventDetails,
-  fetchSessions, upsertSession, deleteSession,
-  fetchAttendees, upsertAttendee, deleteAttendee,
+  fetchSessions, upsertSession, deleteSession, archiveSession,
+  fetchAttendees, upsertAttendee, deleteAttendee, archiveParticipant,
   fetchPending, upsertPending, deletePending,
   fetchOrganizations, upsertOrganization, deleteOrganization,
   fetchSponsors, upsertSponsor, deleteSponsor,
   fetchExhibitors, upsertExhibitor, deleteExhibitor,
-  fetchTickets, upsertTicket, deleteTicket,
-  fetchTeam, upsertTeamMember, deleteTeamMember,
-  fetchFloorPlans, upsertFloorPlan, deleteFloorPlan,
-  fetchForms, upsertForm, deleteForm,
+  fetchTickets, upsertTicket, deleteTicket, archiveTicket,
+  fetchTeam, upsertTeamMember, deleteTeamMember, archiveTeamMember,
+  fetchFloorPlans, upsertFloorPlan, deleteFloorPlan, archiveFloorPlan, generateUuid,
+  fetchForms, upsertForm, deleteForm, archiveForm,
   fetchFormSubmissions, submitFormResponse, deleteFormSubmission,
+  fetchRSVPs, fetchRSVPSettings, upsertRSVPSettings, submitGuestRSVP, updateRSVPStatus, deleteRSVP, archiveRSVP,
   uploadFileToBucket,
-  fetchUserEvents, fetchPublicEvents, createEvent, deleteEvent,
+  fetchUserEvents, fetchPublicEvents, createEvent, deleteEvent, archiveEvent, unarchiveEvent,
   fetchVisitorRegistrations, registerVisitorForEvent, upsertUserProfile,
-  setActiveEventId, getActiveEventId, DEFAULT_EVENT_ID, SHOWCASE_EVENTS
+  setActiveEventId, getActiveEventId, DEFAULT_EVENT_ID, SHOWCASE_EVENTS,
+  subscribeToRealtimeSync, broadcastRealtimeChange
 } from "../lib/db";
 import { supabase } from "../lib/supabase";
 
@@ -70,33 +78,71 @@ const INDUSTRIES = [
   "Consulting & Professional Services"
 ];
 
-export default function Home() {
+export function HomeContent() {
+  const { t, lang, setLang, isRTL, dir, languages } = useLanguage();
+  const [mounted, setMounted] = useState(false);
+
   // Authentication & Role State
   const [currentUser, setCurrentUser] = useState(null);
-  const [authInitialized, setAuthInitialized] = useState(false);
+  const [authInitialized, setAuthInitialized] = useState(true);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalInitialMode, setAuthModalInitialMode] = useState("signin");
 
   // Multi-Event State
-  const [publicEvents, setPublicEvents] = useState(SHOWCASE_EVENTS);
-  const [userEvents, setUserEvents] = useState(SHOWCASE_EVENTS);
-  const [activeEventId, setActiveEventStateId] = useState(DEFAULT_EVENT_ID);
+  const [publicEvents, setPublicEvents] = useState([]);
+  const [userEvents, setUserEvents] = useState([]);
+  const [activeEventId, setActiveEventStateId] = useState(() => {
+    if (typeof window !== "undefined") {
+      const searchParams = new URLSearchParams(window.location.search);
+      return searchParams.get("eventId") || DEFAULT_EVENT_ID;
+    }
+    return DEFAULT_EVENT_ID;
+  });
   const [isCreationWizardOpen, setIsCreationWizardOpen] = useState(false);
   const [eventSwitcherOpen, setEventSwitcherOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const [langDropdownOpen, setLangDropdownOpen] = useState(false);
 
   // Visitor Registrations
   const [visitorRegistrations, setVisitorRegistrations] = useState([]);
 
-  // Main UI routing view: 'home' is the default public browse landing page!
-  const [currentView, setCurrentView] = useState("home"); 
+  // Main UI routing view: initialized synchronously from URL query param to eliminate flash of home page
+  const [currentView, setCurrentView] = useState(() => {
+    if (typeof window !== "undefined") {
+      const searchParams = new URLSearchParams(window.location.search);
+      const viewParam = searchParams.get("view");
+      const validViews = [
+        "home", "auth", "profile", "my-tickets", "events-hub", "create-event", "event-landing", "register", "visitor-portal", "overview", "page-builder", "calendar", "event-details", 
+        "attendees", "pending", "organizations", "sponsors", 
+        "exhibitors", "speakers", "tickets", "forms", "rsvp", "check-in", 
+        "my-team", "analytics", "communications", "floor-plan"
+      ];
+      if (viewParam && validViews.includes(viewParam)) {
+        return viewParam;
+      }
+    }
+    return "home";
+  }); 
   const [participantsOpen, setParticipantsOpen] = useState(false);
-  const [activeFloorPlanId, setActiveFloorPlanId] = useState(null);
-  const [initialPreviewMode, setInitialPreviewMode] = useState(false);
-  const [saveStatus, setSaveStatus] = useState("Saved");
+  const [activeFloorPlanId, setActiveFloorPlanId] = useState(() => {
+    if (typeof window !== "undefined") {
+      const searchParams = new URLSearchParams(window.location.search);
+      return searchParams.get("planId") || null;
+    }
+    return null;
+  });
+  const [initialPreviewMode, setInitialPreviewMode] = useState(() => {
+    if (typeof window !== "undefined") {
+      const searchParams = new URLSearchParams(window.location.search);
+      return searchParams.get("preview") === "true";
+    }
+    return false;
+  });
+  const [saveStatus, setSaveStatus] = useState("saved");
 
   // Single-event data
-  const [eventDetails, setEventDetails] = useState(SHOWCASE_EVENTS[0]);
+  const [eventDetails, setEventDetails] = useState(null);
+
   const [sessions, setSessions] = useState([]);
   const [attendees, setAttendees] = useState([]);
   const [pending, setPending] = useState([]);
@@ -108,6 +154,9 @@ export default function Home() {
   const [floorPlans, setFloorPlans] = useState([]);
   const [forms, setForms] = useState([]);
   const [formSubmissions, setFormSubmissions] = useState([]);
+  const [rsvps, setRsvps] = useState([]);
+  const [rsvpSettings, setRsvpSettings] = useState(null);
+  const [showGlobalPublicRsvp, setShowGlobalPublicRsvp] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
   const isInitializedRef = useRef(false);
@@ -153,20 +202,34 @@ export default function Home() {
     // 2. Validate with live Supabase session & real-time sync
     let profileChannel = null;
 
-    const syncSupabaseSession = async () => {
+    const syncSupabaseSession = async (explicitSession = null) => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        let session = explicitSession;
+        if (!session) {
+          const { data } = await supabase.auth.getSession();
+          session = data?.session;
+        }
         if (session?.user && isMounted) {
           const userId = session.user.id;
           const { data: profile } = await supabase
             .from('profiles')
             .select('*')
             .eq('id', userId)
-            .single();
+            .maybeSingle();
 
-          const retrievedName = profile?.full_name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || "Eventzone User";
+          const retrievedName = profile?.full_name || session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || "Eventzone User";
           const retrievedRole = profile?.role || session.user.user_metadata?.role || "organizer";
-          const retrievedAvatar = profile?.avatar_url || session.user.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(retrievedName)}&background=0b5cdb&color=fff`;
+          const retrievedAvatar = profile?.avatar_url || session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(retrievedName)}&background=0b5cdb&color=fff`;
+
+          if (!profile) {
+            await supabase.from('profiles').upsert({
+              id: userId,
+              full_name: retrievedName,
+              email: session.user.email,
+              avatar_url: retrievedAvatar,
+              role: retrievedRole === 'attendee' ? 'attendee' : 'organizer'
+            }).catch(console.error);
+          }
 
           const syncedUser = {
             id: userId,
@@ -193,45 +256,47 @@ export default function Home() {
           }
 
           // Cross-device / App <-> Web Real-time Database Subscription
-          profileChannel = supabase
-            .channel(`public-profiles-sync-${userId}`)
-            .on(
-              'postgres_changes',
-              { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
-              (payload) => {
-                if (payload.new && isMounted) {
-                  const updated = payload.new;
-                  const updatedName = updated.full_name || "Eventzone User";
-                  const updatedRole = updated.role || "organizer";
-                  const updatedAvatar = updated.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(updatedName)}&background=0b5cdb&color=fff`;
+          if (!profileChannel) {
+            profileChannel = supabase
+              .channel(`public-profiles-sync-${userId}`)
+              .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
+                (payload) => {
+                  if (payload.new && isMounted) {
+                    const updated = payload.new;
+                    const updatedName = updated.full_name || "Eventzone User";
+                    const updatedRole = updated.role || "organizer";
+                    const updatedAvatar = updated.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(updatedName)}&background=0b5cdb&color=fff`;
 
-                  const updatedUser = {
-                    id: userId,
-                    email: updated.email || session.user.email,
-                    fullName: updatedName,
-                    role: updatedRole === 'attendee' ? 'visitor' : updatedRole,
-                    companyName: updated.company_name || "",
-                    jobTitle: updated.job_title || "",
-                    phone: updated.phone || "",
-                    bio: updated.bio || "",
-                    location: updated.location || "",
-                    interests: Array.isArray(updated.interests) ? updated.interests : [],
-                    socialLinks: updated.social_links || [],
-                    metadata: updated.metadata || {},
-                    what_im_looking_for: updated.what_im_looking_for || "",
-                    whatImLookingFor: updated.what_im_looking_for || "",
-                    avatar: updatedAvatar,
-                    isAdmin: !!updated.is_admin,
-                  };
+                    const updatedUser = {
+                      id: userId,
+                      email: updated.email || session.user.email,
+                      fullName: updatedName,
+                      role: updatedRole === 'attendee' ? 'visitor' : updatedRole,
+                      companyName: updated.company_name || "",
+                      jobTitle: updated.job_title || "",
+                      phone: updated.phone || "",
+                      bio: updated.bio || "",
+                      location: updated.location || "",
+                      interests: Array.isArray(updated.interests) ? updated.interests : [],
+                      socialLinks: updated.social_links || [],
+                      metadata: updated.metadata || {},
+                      what_im_looking_for: updated.what_im_looking_for || "",
+                      whatImLookingFor: updated.what_im_looking_for || "",
+                      avatar: updatedAvatar,
+                      isAdmin: !!updated.is_admin,
+                    };
 
-                  setCurrentUser(updatedUser);
-                  if (typeof window !== "undefined") {
-                    localStorage.setItem("eventzone_user", JSON.stringify(updatedUser));
+                    setCurrentUser(updatedUser);
+                    if (typeof window !== "undefined") {
+                      localStorage.setItem("eventzone_user", JSON.stringify(updatedUser));
+                    }
                   }
                 }
-              }
-            )
-            .subscribe();
+              )
+              .subscribe();
+          }
         }
       } catch (err) {
         console.warn("Supabase live session sync:", err);
@@ -242,13 +307,16 @@ export default function Home() {
 
     syncSupabaseSession();
 
-    // 3. Listen to auth state changes (e.g. login, token refresh, logout)
+    // 3. Listen to auth state changes (e.g. login, token refresh, logout, OAuth callback)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === "SIGNED_OUT" && isMounted) {
         if (typeof window !== "undefined") {
           localStorage.removeItem("eventzone_user");
         }
         setCurrentUser(null);
+      } else if ((event === "SIGNED_IN" || event === "USER_UPDATED" || event === "TOKEN_REFRESHED") && session?.user && isMounted) {
+        await syncSupabaseSession(session);
+        setCurrentView(prev => (prev === "auth" ? "events-hub" : prev));
       }
     });
 
@@ -269,8 +337,8 @@ export default function Home() {
           currentUser ? fetchUserEvents(currentUser.id) : fetchUserEvents(null),
           fetchVisitorRegistrations(currentUser?.email),
         ]);
-        if (pEvents && pEvents.length > 0) setPublicEvents(pEvents);
-        if (uEvents && uEvents.length > 0) setUserEvents(uEvents);
+        setPublicEvents(pEvents || []);
+        setUserEvents(uEvents || []);
         setVisitorRegistrations(vRegs || []);
       } catch (err) {
         console.error("Error loading events hub:", err);
@@ -279,6 +347,7 @@ export default function Home() {
 
     loadEventsData();
   }, [currentUser]);
+
 
   // Load single-event data whenever activeEventId changes
   useEffect(() => {
@@ -301,12 +370,15 @@ export default function Home() {
           fetchFloorPlans(activeEventId),
           fetchForms(activeEventId),
           fetchFormSubmissions(activeEventId),
+          fetchRSVPs(activeEventId),
+          fetchRSVPSettings(activeEventId),
         ]);
 
         const [
           eventResult, sessionsResult, attendeesResult, pendingResult,
           orgsResult, sponsorsResult, exhibitorsResult, ticketsResult,
-          teamResult, floorPlansResult, formsResult, formSubsResult
+          teamResult, floorPlansResult, formsResult, formSubsResult,
+          rsvpsResult, rsvpSettingsResult
         ] = results;
 
         if (eventResult.status === "fulfilled") setEventDetails(eventResult.value);
@@ -321,6 +393,8 @@ export default function Home() {
         if (floorPlansResult.status === "fulfilled") setFloorPlans(floorPlansResult.value);
         if (formsResult.status === "fulfilled") setForms(formsResult.value);
         if (formSubsResult.status === "fulfilled") setFormSubmissions(formSubsResult.value);
+        if (rsvpsResult.status === "fulfilled") setRsvps(rsvpsResult.value);
+        if (rsvpSettingsResult.status === "fulfilled") setRsvpSettings(rsvpSettingsResult.value);
 
       } catch (err) {
         console.error("Unexpected error loading data for event:", err);
@@ -330,6 +404,83 @@ export default function Home() {
     };
 
     loadEventData();
+  }, [activeEventId]);
+
+  // Real-time Event Subscription (Cross-tab & Multi-device Live Sync)
+  useEffect(() => {
+    if (!activeEventId) return;
+
+    // 1. Cross-tab in-browser real-time broadcast listener
+    const unsubscribeSync = subscribeToRealtimeSync((data) => {
+      const { type, payload, eventId } = data || {};
+      if (eventId && eventId !== activeEventId && eventId !== DEFAULT_EVENT_ID) return;
+
+      if (type === "FORM_SAVED" && payload) {
+        setForms(prev => {
+          const exists = prev.some(f => f.id === payload.id);
+          return exists ? prev.map(f => f.id === payload.id ? payload : f) : [payload, ...prev];
+        });
+      } else if (type === "FORM_DELETED" && payload?.id) {
+        setForms(prev => prev.filter(f => f.id !== payload.id));
+      } else if (type === "SUBMISSION_ADDED" && payload) {
+        setFormSubmissions(prev => {
+          const exists = prev.some(s => s.id === payload.id);
+          return exists ? prev : [payload, ...prev];
+        });
+      } else if (type === "SUBMISSION_DELETED" && payload?.id) {
+        setFormSubmissions(prev => prev.filter(s => s.id !== payload.id));
+      } else if (type === "RSVP_SUBMITTED" && payload) {
+        setRsvps(prev => {
+          const exists = prev.some(r => r.id === payload.id);
+          return exists ? prev.map(r => r.id === payload.id ? payload : r) : [payload, ...prev];
+        });
+      } else if (type === "RSVP_UPDATED" && payload) {
+        setRsvps(prev => prev.map(r => r.id === payload.id ? payload : r));
+      } else if (type === "RSVP_DELETED" && payload?.id) {
+        setRsvps(prev => prev.filter(r => r.id !== payload.id));
+      } else if (type === "RSVP_SETTINGS_SAVED" && payload) {
+        setRsvpSettings(payload);
+      }
+    });
+
+    // 2. Supabase Realtime Postgres Changes Channel
+    let eventChannel = null;
+    try {
+      eventChannel = supabase
+        .channel(`event-live-sync-${activeEventId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'forms', filter: `event_id=eq.${activeEventId}` }, async () => {
+          const updatedForms = await fetchForms(activeEventId);
+          if (updatedForms) setForms(updatedForms);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'form_submissions', filter: `event_id=eq.${activeEventId}` }, async () => {
+          const updatedSubs = await fetchFormSubmissions(activeEventId);
+          if (updatedSubs) setFormSubmissions(updatedSubs);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'rsvps', filter: `event_id=eq.${activeEventId}` }, async () => {
+          const updatedRsvps = await fetchRSVPs(activeEventId);
+          if (updatedRsvps) setRsvps(updatedRsvps);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'rsvp_settings', filter: `event_id=eq.${activeEventId}` }, async () => {
+          const updatedSettings = await fetchRSVPSettings(activeEventId);
+          if (updatedSettings) setRsvpSettings(updatedSettings);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'participants', filter: `event_id=eq.${activeEventId}` }, async () => {
+          const updatedAttendees = await fetchAttendees(activeEventId);
+          if (updatedAttendees) setAttendees(updatedAttendees);
+        })
+        .on('postgres_changes', { event: '*', schema: 'tickets', table: 'tickets', filter: `event_id=eq.${activeEventId}` }, async () => {
+          const updatedTickets = await fetchTickets(activeEventId);
+          if (updatedTickets) setTickets(updatedTickets);
+        })
+        .subscribe();
+    } catch (e) {
+      console.warn("Supabase event channel error:", e);
+    }
+
+    return () => {
+      unsubscribeSync();
+      eventChannel?.unsubscribe();
+    };
   }, [activeEventId]);
 
   // Synchronize state variables to URL query parameters
@@ -349,6 +500,14 @@ export default function Home() {
         params.set("preview", "true");
       }
     }
+    // If ticket param is present in URL when in register view, preserve it
+    if (currentView === "register" && typeof window !== "undefined") {
+      const currentSearchParams = new URLSearchParams(window.location.search);
+      const ticketVal = currentSearchParams.get("ticket");
+      if (ticketVal) {
+        params.set("ticket", ticketVal);
+      }
+    }
 
     const queryString = params.toString();
     const newUrl = queryString ? `/?${queryString}` : "/";
@@ -358,9 +517,11 @@ export default function Home() {
     }
   }, [currentView, activeFloorPlanId, initialPreviewMode, activeEventId, isLoading]);
 
-  // Parse URL query parameters on initial load
+  // Parse URL query parameters on initial load & on browser Back/Forward (popstate)
   useEffect(() => {
-    if (!isLoading && typeof window !== "undefined") {
+    if (typeof window === "undefined") return;
+
+    const syncStateFromUrl = () => {
       const searchParams = new URLSearchParams(window.location.search);
       const viewParam = searchParams.get("view");
       const eventIdParam = searchParams.get("eventId");
@@ -375,21 +536,14 @@ export default function Home() {
         if (viewParam === "floor-plan") {
           setCurrentView("floor-plan");
           if (planIdParam) {
-            const planExists = floorPlans.some(p => p.id === planIdParam || String(p.id) === String(planIdParam));
-            if (planExists) {
-              setActiveFloorPlanId(planIdParam);
-              if (previewParam === "true") {
-                setInitialPreviewMode(true);
-              }
-            } else {
-              setActiveFloorPlanId(null);
+            setActiveFloorPlanId(planIdParam);
+            if (previewParam === "true") {
+              setInitialPreviewMode(true);
             }
-          } else {
-            setActiveFloorPlanId(null);
           }
         } else {
           const validViews = [
-            "home", "auth", "profile", "events-hub", "create-event", "event-landing", "visitor-portal", "overview", "page-builder", "calendar", "event-details", 
+            "home", "auth", "profile", "my-tickets", "events-hub", "create-event", "event-landing", "register", "visitor-portal", "overview", "page-builder", "calendar", "event-details", 
             "attendees", "pending", "organizations", "sponsors", 
             "exhibitors", "speakers", "tickets", "check-in", 
             "my-team", "analytics", "communications"
@@ -398,10 +552,18 @@ export default function Home() {
             setCurrentView(viewParam);
           }
         }
+      } else {
+        setCurrentView("home");
       }
       isInitializedRef.current = true;
-    }
-  }, [isLoading, floorPlans, activeEventId]);
+    };
+
+    syncStateFromUrl();
+    setMounted(true);
+
+    window.addEventListener("popstate", syncStateFromUrl);
+    return () => window.removeEventListener("popstate", syncStateFromUrl);
+  }, []);
 
   // Auth Success Handler
   const handleAuthSuccess = (user) => {
@@ -496,17 +658,24 @@ export default function Home() {
     }
   };
 
-  // Event Delete Handler
-  const handleDeleteEvent = async (id) => {
-    if (confirm("Are you sure you want to delete this event?")) {
-      await deleteEvent(id);
-      setUserEvents(prev => prev.filter(e => e.id !== id));
+  // Event Archive Handler (Soft delete - data is safe in archive)
+  const handleArchiveEvent = async (id) => {
+    if (confirm("Archive this event? (Data will be preserved in your archives)")) {
+      await archiveEvent(id);
+      setUserEvents(prev => prev.map(e => e.id === id ? { ...e, status: "archived" } : e));
       setPublicEvents(prev => prev.filter(e => e.id !== id));
       if (activeEventId === id) {
         setActiveEventStateId(DEFAULT_EVENT_ID);
       }
     }
   };
+
+  const handleUnarchiveEvent = async (id) => {
+    await unarchiveEvent(id);
+    setUserEvents(prev => prev.map(e => e.id === id ? { ...e, status: "published" } : e));
+  };
+
+  const handleDeleteEvent = handleArchiveEvent;
 
   // Visitor RSVP Handler
   const handleVisitorRegister = async (eventId, visitorData) => {
@@ -517,21 +686,24 @@ export default function Home() {
 
   // Floor Plan Save Helpers
   const saveFloorPlanWithStatus = async (plan) => {
-    setSaveStatus("Saving...");
+    setSaveStatus("saving");
     try {
       await upsertFloorPlan(plan, activeEventId);
-      setSaveStatus("Saved");
+      setSaveStatus("saved");
     } catch (err) {
       console.error("Auto-save floor plan failed:", err);
-      setSaveStatus("Error saving");
+      setSaveStatus("error");
     }
   };
 
   const handleCreateFloorPlan = async (name) => {
-    const newId = `plan-${Date.now()}`;
+    const validName = (typeof name === "string" && name.trim().length > 0)
+      ? name.trim()
+      : `Floor Plan ${floorPlans.length + 1}`;
+    const newId = generateUuid();
     const newPlan = {
       id: newId,
-      name: name || `Floor Plan ${floorPlans.length + 1}`,
+      name: validName,
       createdAt: new Date().toISOString(),
       elements: [],
       blueprint: {
@@ -553,10 +725,13 @@ export default function Home() {
     };
     try {
       const saved = await upsertFloorPlan(newPlan, activeEventId);
-      setFloorPlans(prev => [...prev, saved]);
-      setActiveFloorPlanId(saved.id);
+      const planToSet = saved || newPlan;
+      setFloorPlans(prev => [...prev.filter(p => p.id !== planToSet.id), planToSet]);
+      setActiveFloorPlanId(planToSet.id);
     } catch (err) {
       console.error("Create floor plan error:", err);
+      setFloorPlans(prev => [...prev, newPlan]);
+      setActiveFloorPlanId(newPlan.id);
     }
   };
 
@@ -565,27 +740,31 @@ export default function Home() {
     if (!source) return;
     const duplicated = {
       ...source,
-      id: `plan-${Date.now()}`,
-      name: `${source.name} (Copy)`,
+      id: generateUuid(),
+      name: `${source.name || "Floor Plan"} (Copy)`,
       createdAt: new Date().toISOString(),
     };
     try {
       const saved = await upsertFloorPlan(duplicated, activeEventId);
-      setFloorPlans(prev => [...prev, saved]);
+      const planToSet = saved || duplicated;
+      setFloorPlans(prev => [...prev.filter(p => p.id !== planToSet.id), planToSet]);
     } catch (err) {
       console.error("Duplicate floor plan error:", err);
+      setFloorPlans(prev => [...prev, duplicated]);
     }
   };
 
-  const handleDeleteFloorPlan = async (id) => {
+  const handleArchiveFloorPlan = async (id) => {
     try {
-      await deleteFloorPlan(id);
-      setFloorPlans(prev => prev.filter(p => p.id !== id));
+      await archiveFloorPlan(id);
+      setFloorPlans(prev => prev.map(p => p.id === id ? { ...p, status: 'archived', isArchived: true } : p));
       if (activeFloorPlanId === id) setActiveFloorPlanId(null);
     } catch (err) {
-      console.error("Delete floor plan error:", err);
+      console.error("Archive floor plan error:", err);
     }
   };
+
+  const handleDeleteFloorPlan = handleArchiveFloorPlan;
 
   const handleRenameFloorPlan = async (id, newName) => {
     setFloorPlans(prev => {
@@ -636,6 +815,7 @@ export default function Home() {
   };
 
   const activePlan = floorPlans.find(p => p.id === activeFloorPlanId) ?? null;
+  const isEditingFloorPlan = currentView === "floor-plan" && Boolean(activeFloorPlanId) && Boolean(activePlan);
 
   // Diff sync helper
   const syncArrayToDb = (oldArr, newArr, upsertFn, deleteFn) => {
@@ -817,6 +997,39 @@ export default function Home() {
     closeModal();
   };
 
+  const handleSaveTicket = async (ticketData) => {
+    try {
+      const saved = await upsertTicket(ticketData, activeEventId);
+      if (ticketData.isPopular) {
+        // Enforce only one ticket has isPopular tag
+        const otherTickets = tickets.map(t => {
+          if (t.id === saved.id) return saved;
+          if (t.isPopular) {
+            const updatedOldPopular = { ...t, isPopular: false };
+            upsertTicket(updatedOldPopular, activeEventId).catch(console.error);
+            return updatedOldPopular;
+          }
+          return t;
+        });
+
+        if (ticketData.id) {
+          setTickets(otherTickets);
+        } else {
+          setTickets([saved, ...otherTickets.filter(t => t.id !== saved.id)]);
+        }
+      } else {
+        if (ticketData.id) {
+          setTickets(prev => prev.map(t => t.id === saved.id ? saved : t));
+        } else {
+          setTickets(prev => [...prev, saved]);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to save ticket:", err);
+      throw err;
+    }
+  };
+
   const closeModal = () => {
     setActiveModalType(null);
     setEditingItem(null);
@@ -882,11 +1095,18 @@ export default function Home() {
     }
   };
 
-  // If session is checking
-  if (!authInitialized) {
+
+  // Prevent hydration mismatch between server-rendered HTML and client URL-selected view
+  if (!mounted) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <span className="w-8 h-8 border-3 border-blue-500 border-t-white rounded-full animate-spin" />
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center font-sans">
+        <div className="flex flex-col items-center gap-3 animate-fade-in">
+          <img 
+            src="https://i.imgur.com/jFDrQbM.png" 
+            alt="eventzone" 
+            className="h-8 w-auto object-contain opacity-80 animate-pulse" 
+          />
+        </div>
       </div>
     );
   }
@@ -925,13 +1145,58 @@ export default function Home() {
   }
 
   // ==========================================================================
+  // 0.9. DEDICATED FULL-PAGE MY TICKETS & DIGITAL PASSES VIEW
+  // ==========================================================================
+  if (currentView === "my-tickets") {
+    return (
+      <MyTicketsPage
+        registrations={visitorRegistrations}
+        events={publicEvents}
+        currentUser={currentUser}
+        onGoToHome={() => setCurrentView("home")}
+        onOpenAuth={(mode) => {
+          setAuthModalInitialMode(mode || "signin");
+          setCurrentView("auth");
+        }}
+        onOpenProfile={() => setCurrentView("profile")}
+        onOpenCreationWizard={() => {
+          if (!currentUser) {
+            setAuthModalInitialMode("signup");
+            setCurrentView("auth");
+          } else {
+            setIsCreationWizardOpen(true);
+          }
+        }}
+        onOpenEventsHub={() => {
+          if (!currentUser) {
+            setAuthModalInitialMode("signup");
+            setCurrentView("auth");
+          } else {
+            setCurrentView("events-hub");
+          }
+        }}
+        onSignOut={handleSignOut}
+        onViewFloorPlan={(eventId) => {
+          setActiveEventStateId(eventId);
+          setCurrentView("floor-plan");
+          setInitialPreviewMode(true);
+        }}
+        onViewLivePage={(eventId) => {
+          setActiveEventStateId(eventId);
+          setCurrentView("event-landing");
+        }}
+      />
+    );
+  }
+
+  // ==========================================================================
   // 1. DEFAULT PUBLIC HOME PAGE (BROWSE & ROLLING HERO)
   // ==========================================================================
   if (currentView === "home") {
     return (
       <>
         <MainHomePage
-          events={publicEvents.length > 0 ? publicEvents : SHOWCASE_EVENTS}
+          events={publicEvents}
           registrations={visitorRegistrations}
           currentUser={currentUser}
           onOpenAuth={(mode) => {
@@ -950,7 +1215,7 @@ export default function Home() {
               setCurrentView("events-hub");
             }
           }}
-          onOpenVisitorPasses={() => setCurrentView("visitor-portal")}
+          onOpenVisitorPasses={() => setCurrentView("my-tickets")}
           onSelectEventForDashboard={(eventId) => {
             setActiveEventStateId(eventId);
             setCurrentView("overview");
@@ -965,15 +1230,31 @@ export default function Home() {
             setCurrentView("event-landing");
           }}
           onRegisterForEvent={handleVisitorRegister}
+          onOpenCreationWizard={() => {
+            if (!currentUser) {
+              setAuthModalInitialMode("signup");
+              setCurrentView("auth");
+            } else {
+              setIsCreationWizardOpen(true);
+            }
+          }}
+          onSwitchToOrganizer={() => {
+            if (!currentUser) {
+              setAuthModalInitialMode("signup");
+              setCurrentView("auth");
+            } else {
+              setCurrentView("events-hub");
+            }
+          }}
         />
       </>
     );
   }
 
   // ==========================================================================
-  // 1.5. EVENT PUBLIC LANDING PAGE (VISITOR & ATTENDEE VIEW)
+  // 1.5. EVENT PUBLIC LANDING PAGE & REGISTRATION (VISITOR & ATTENDEE VIEW)
   // ==========================================================================
-  if (currentView === "event-landing") {
+  if (currentView === "event-landing" || currentView === "register") {
     const landingEventDetails = publicEvents.find(e => e.id === activeEventId) || userEvents.find(e => e.id === activeEventId) || eventDetails;
     return (
       <EventPublicLandingPage
@@ -992,6 +1273,16 @@ export default function Home() {
         tickets={tickets}
         forms={forms}
         formSubmissions={formSubmissions}
+        rsvps={rsvps}
+        rsvpSettings={rsvpSettings}
+        onSubmitRSVP={async (rsvpData) => {
+          const saved = await submitGuestRSVP(rsvpData, activeEventId);
+          setRsvps(prev => {
+            const exists = prev.some(r => r.id === saved.id);
+            return exists ? prev.map(r => r.id === saved.id ? saved : r) : [saved, ...prev];
+          });
+          return { success: true, rsvp: saved, assignedStatus: saved.status };
+        }}
         onSubmitFormResponse={async (sub) => {
           const saved = await submitFormResponse(sub, activeEventId);
           setFormSubmissions(prev => [saved, ...prev]);
@@ -1019,15 +1310,23 @@ export default function Home() {
   if (currentView === "events-hub") {
     return (
       <OrganizerEventsHub
-        events={userEvents.length > 0 ? userEvents : SHOWCASE_EVENTS}
+        events={userEvents}
+        registrations={visitorRegistrations}
         onSelectEvent={(id) => {
           setActiveEventStateId(id);
           setCurrentView("overview");
         }}
         onCreateEventClick={() => setCurrentView("create-event")}
-        onDeleteEvent={handleDeleteEvent}
-        onSwitchToVisitor={() => handleToggleRole("visitor")}
+        onDeleteEvent={handleArchiveEvent}
+        onArchiveEvent={handleArchiveEvent}
+        onUnarchiveEvent={handleUnarchiveEvent}
+        onSwitchToVisitor={() => setCurrentView("my-tickets")}
         onGoToHome={() => setCurrentView("home")}
+        onOpenProfile={() => setCurrentView("profile")}
+        onOpenAuth={(mode) => {
+          setAuthModalInitialMode(mode || "signin");
+          setCurrentView("auth");
+        }}
         onSignOut={handleSignOut}
         user={currentUser}
       />
@@ -1043,6 +1342,7 @@ export default function Home() {
         onCancel={() => setCurrentView("events-hub")}
         onEventCreated={handleEventCreated}
         userId={currentUser?.id}
+        onUploadFile={uploadFileToBucket}
       />
     );
   }
@@ -1054,7 +1354,7 @@ export default function Home() {
     return (
       <>
         <VisitorPortal
-          events={publicEvents.length > 0 ? publicEvents : SHOWCASE_EVENTS}
+          events={publicEvents}
           registrations={visitorRegistrations}
           onRegisterForEvent={handleVisitorRegister}
           onViewFloorPlan={(eventId) => {
@@ -1066,9 +1366,14 @@ export default function Home() {
             setActiveEventStateId(eventId);
             setCurrentView("event-landing");
           }}
-          onSwitchToOrganizer={() => handleToggleRole("organizer")}
-          onSignOut={handleSignOut}
+          onSwitchToOrganizer={() => setCurrentView("events-hub")}
+          onGoToHome={() => setCurrentView("home")}
+          onOpenAuth={(mode) => {
+            setAuthModalInitialMode(mode || "signin");
+            setCurrentView("auth");
+          }}
           onOpenProfile={() => setCurrentView("profile")}
+          onSignOut={handleSignOut}
           user={currentUser}
         />
       </>
@@ -1078,27 +1383,60 @@ export default function Home() {
   // ==========================================================================
   // 4. SINGLE EVENT DASHBOARD (ORGANIZER VIEW)
   // ==========================================================================
-  const currentEventSummary = userEvents.find(e => e.id === activeEventId) || eventDetails;
+  const currentEventSummary = userEvents.find(e => e.id === activeEventId) || eventDetails || {};
 
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans">
-      {/* Sidebar Navigation — hidden while editing a floor plan in full preview */}
-      {!(currentView === "floor-plan" && activeFloorPlanId !== null && initialPreviewMode) && (
-      <aside className="w-[260px] h-screen bg-white border-r border-slate-200 py-6 px-4 flex flex-col justify-between sticky top-0 overflow-y-auto shrink-0 select-none z-40">
+      {/* Sidebar Navigation — hidden while editing a floor plan */}
+      {!isEditingFloorPlan && (
+      <aside className="w-[320px] h-screen bg-white border-r border-slate-200 py-6 px-5 sm:px-6 flex flex-col justify-between sticky top-0 overflow-y-auto shrink-0 select-none z-40">
         <div className="space-y-5">
-          {/* Top Logo & Back to Public Home */}
-          <div className="flex items-center justify-between px-2">
-            <div className="flex items-center gap-2 cursor-pointer" onClick={() => setCurrentView("home")}>
-              <img src="https://i.imgur.com/jFDrQbM.png" alt="eventzone" className="h-6 w-auto object-contain" />
+          {/* Top Logo & Language Selector Icon */}
+          <div className="flex items-center justify-between px-1 relative">
+            <div className="flex items-center gap-2 cursor-pointer" onClick={() => setCurrentView("home")} title="Eventzone Home">
+              <img src="https://i.imgur.com/jFDrQbM.png" alt="eventzone" style={{ height: '24px', width: 'auto', maxWidth: '140px' }} className="h-6 w-auto object-contain" />
             </div>
 
-            <button
-              onClick={() => setCurrentView("home")}
-              className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-slate-50 transition-colors"
-              title="Return to Public Home"
-            >
-              <HomeIcon size={16} />
-            </button>
+            {/* Language Selector Icon Trigger */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setLangDropdownOpen(o => !o)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer shadow-2xs"
+                title={`Language: ${languages.find(l => l.code === lang)?.label || "Language"}`}
+              >
+                <img src={languages.find(l => l.code === lang)?.icon || "https://i.imgur.com/NXtMImD.png"} alt={lang} className="w-4 h-4 object-contain rounded-xs" />
+                <ChevronDown size={11} className={`text-slate-400 transition-transform ${langDropdownOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {/* Language Dropdown Menu */}
+              {langDropdownOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setLangDropdownOpen(false)} />
+                  <div className="absolute right-0 top-full mt-2 w-36 bg-white border border-slate-200 rounded-2xl shadow-xl p-1.5 space-y-1 z-50 animate-scale-up">
+                    {languages.map(l => (
+                      <button
+                        key={l.code}
+                        type="button"
+                        onClick={() => {
+                          setLang(l.code);
+                          setLangDropdownOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                          lang === l.code ? "bg-blue-50 text-blue-600" : "text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <img src={l.icon} alt={l.code} className="w-4 h-4 object-contain" />
+                          <span>{l.label}</span>
+                        </div>
+                        {lang === l.code && <Check size={13} className="text-blue-600 shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Active Event Selector Box */}
@@ -1113,10 +1451,10 @@ export default function Home() {
                 </div>
                 <div className="flex flex-col text-left overflow-hidden">
                   <span className="text-[11px] font-bold text-slate-900 truncate leading-tight">
-                    {currentEventSummary.title || eventDetails.title}
+                    {currentEventSummary?.title || eventDetails?.title || "Eventzone Summit"}
                   </span>
                   <span className="text-[9px] text-slate-400 font-medium truncate">
-                    {currentEventSummary.type || "Hybrid"} Event
+                    {currentEventSummary?.type || eventDetails?.type || "Hybrid"} Event
                   </span>
                 </div>
               </div>
@@ -1142,7 +1480,6 @@ export default function Home() {
                       }`}
                     >
                       <span className="truncate">{ev.title}</span>
-                      {ev.id === activeEventId && <CheckCircle2 size={12} className="text-blue-600 shrink-0" />}
                     </button>
                   ))}
                 </div>
@@ -1153,10 +1490,9 @@ export default function Home() {
                       setEventSwitcherOpen(false);
                       setCurrentView("create-event");
                     }}
-                    className="w-full text-left p-2 rounded-xl text-xs font-bold text-blue-600 hover:bg-blue-50 flex items-center gap-1.5 cursor-pointer"
+                    className="w-full text-left p-2 rounded-xl text-xs font-bold text-blue-600 hover:bg-blue-50 flex items-center cursor-pointer"
                   >
-                    <Plus size={13} />
-                    <span>+ Host New Event</span>
+                    <span>Host New Event</span>
                   </button>
 
                   <button
@@ -1164,9 +1500,8 @@ export default function Home() {
                       setEventSwitcherOpen(false);
                       setCurrentView("events-hub");
                     }}
-                    className="w-full text-left p-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer"
+                    className="w-full text-left p-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 flex items-center cursor-pointer"
                   >
-                    <Layers size={13} />
                     <span>All Events Hub</span>
                   </button>
                 </div>
@@ -1178,89 +1513,107 @@ export default function Home() {
           <nav className="flex flex-col gap-1">
             <button 
               onClick={() => setCurrentView("overview")}
-              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl font-bold text-xs transition-all text-left ${currentView === "overview" ? "bg-blue-600 text-white shadow-xs" : "text-slate-500 hover:bg-slate-50 hover:text-blue-600"}`}
+              className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl font-bold text-xs transition-all text-left group ${currentView === "overview" ? "bg-blue-600 text-white shadow-xs" : "text-slate-600 hover:bg-slate-50 hover:text-blue-600"}`}
             >
-              <LayoutDashboard size={15} />
-              <span>Overview</span>
+              <LayoutDashboard size={15} className={`shrink-0 ${currentView === "overview" ? "text-white" : "text-slate-400 group-hover:text-blue-600"}`} />
+              <span>{t("dash.overview", "Overview")}</span>
             </button>
 
             <button 
               onClick={() => setCurrentView("event-details")}
-              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl font-bold text-xs transition-all text-left ${["event-details", "page-builder"].includes(currentView) ? "bg-blue-600 text-white shadow-xs" : "text-slate-500 hover:bg-slate-50 hover:text-blue-600"}`}
+              className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl font-bold text-xs transition-all text-left group ${["event-details", "page-builder"].includes(currentView) ? "bg-blue-600 text-white shadow-xs" : "text-slate-600 hover:bg-slate-50 hover:text-blue-600"}`}
             >
-              <Globe size={15} />
-              <span>Event Details</span>
+              <FileText size={15} className={`shrink-0 ${["event-details", "page-builder"].includes(currentView) ? "text-white" : "text-slate-400 group-hover:text-blue-600"}`} />
+              <span>{t("dash.eventDetails", "Event Details")}</span>
             </button>
 
             <button 
               onClick={() => setCurrentView("calendar")}
-              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl font-bold text-xs transition-all text-left ${currentView === "calendar" ? "bg-blue-600 text-white shadow-xs" : "text-slate-500 hover:bg-slate-50 hover:text-blue-600"}`}
+              className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl font-bold text-xs transition-all text-left group ${currentView === "calendar" ? "bg-blue-600 text-white shadow-xs" : "text-slate-600 hover:bg-slate-50 hover:text-blue-600"}`}
             >
-              <Calendar size={15} />
-              <span>Timeline</span>
+              <Calendar size={15} className={`shrink-0 ${currentView === "calendar" ? "text-white" : "text-slate-400 group-hover:text-blue-600"}`} />
+              <span>{t("dash.calendar", "Agenda")}</span>
             </button>
 
             {/* Expandable Participants Submenu */}
             <div className="flex flex-col">
               <button 
                 onClick={() => setParticipantsOpen(!participantsOpen)}
-                className={`flex items-center justify-between px-4 py-2.5 rounded-xl font-bold text-xs transition-all text-left ${["attendees", "pending", "organizations", "sponsors", "exhibitors", "speakers"].includes(currentView) ? "text-blue-700 bg-blue-50/50 font-extrabold" : "text-slate-500 hover:bg-slate-50"}`}
+                className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl font-bold text-xs transition-all text-left group ${["attendees", "pending", "organizations", "sponsors", "exhibitors", "speakers"].includes(currentView) ? "text-blue-700 bg-blue-50/50 font-extrabold" : "text-slate-600 hover:bg-slate-50"}`}
               >
-                <div className="flex items-center gap-3">
-                  <Users2 size={15} />
-                  <span>Participants</span>
+                <div className="flex items-center gap-2.5">
+                  <Users2 size={15} className={`shrink-0 ${["attendees", "pending", "organizations", "sponsors", "exhibitors", "speakers"].includes(currentView) ? "text-blue-600" : "text-slate-400 group-hover:text-blue-600"}`} />
+                  <span>{t("dash.attendees", "All Attendees")}</span>
                 </div>
-                <ChevronDown size={13} className={`transition-transform duration-200 ${participantsOpen ? "rotate-180" : ""}`} />
+                <span className="text-[10px] font-bold text-slate-400">{participantsOpen ? "−" : "+"}</span>
               </button>
 
               {participantsOpen && (
-                <div className="flex flex-col gap-0.5 pl-6 mt-1 border-l border-slate-100 ml-6">
+                <div className="flex flex-col gap-0.5 pl-4 mt-1 border-l border-slate-100 ml-5">
                   <button 
                     onClick={() => setCurrentView("attendees")}
-                    className={`flex items-center justify-between px-3 py-1.5 rounded-lg font-semibold text-xs text-left transition-all ${currentView === "attendees" ? "text-blue-700 bg-blue-50 font-bold" : "text-slate-400 hover:text-blue-600"}`}
+                    className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg font-semibold text-xs text-left transition-all ${currentView === "attendees" ? "text-blue-700 bg-blue-50 font-bold" : "text-slate-500 hover:text-blue-600"}`}
                   >
-                    <span>All Attendees</span>
-                    <span className={`text-[9px] font-extrabold py-0.5 px-2 rounded-full ${currentView === "attendees" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{attendees.length}</span>
+                    <div className="flex items-center gap-2">
+                      <UserCheck size={13} className="shrink-0" />
+                      <span>{t("dash.attendees", "All Attendees")}</span>
+                    </div>
+                    <span className={`text-[9px] font-extrabold py-0.5 px-1.5 rounded-full ${currentView === "attendees" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{attendees.length}</span>
                   </button>
 
                   <button 
                     onClick={() => setCurrentView("pending")}
-                    className={`flex items-center justify-between px-3 py-1.5 rounded-lg font-semibold text-xs text-left transition-all ${currentView === "pending" ? "text-blue-700 bg-blue-50 font-bold" : "text-slate-400 hover:text-blue-600"}`}
+                    className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg font-semibold text-xs text-left transition-all ${currentView === "pending" ? "text-blue-700 bg-blue-50 font-bold" : "text-slate-500 hover:text-blue-600"}`}
                   >
-                    <span>Pending</span>
-                    <span className={`text-[9px] font-extrabold py-0.5 px-2 rounded-full ${currentView === "pending" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{pending.length}</span>
+                    <div className="flex items-center gap-2">
+                      <Clock size={13} className="shrink-0" />
+                      <span>{t("dash.pending", "Pending")}</span>
+                    </div>
+                    <span className={`text-[9px] font-extrabold py-0.5 px-1.5 rounded-full ${currentView === "pending" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{pending.length}</span>
                   </button>
 
                   <button 
                     onClick={() => setCurrentView("organizations")}
-                    className={`flex items-center justify-between px-3 py-1.5 rounded-lg font-semibold text-xs text-left transition-all ${currentView === "organizations" ? "text-blue-700 bg-blue-50 font-bold" : "text-slate-400 hover:text-blue-600"}`}
+                    className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg font-semibold text-xs text-left transition-all ${currentView === "organizations" ? "text-blue-700 bg-blue-50 font-bold" : "text-slate-500 hover:text-blue-600"}`}
                   >
-                    <span>Organizations</span>
-                    <span className={`text-[9px] font-extrabold py-0.5 px-2 rounded-full ${currentView === "organizations" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{organizations.length}</span>
+                    <div className="flex items-center gap-2">
+                      <Building2 size={13} className="shrink-0" />
+                      <span>{t("dash.organizations", "Organizations")}</span>
+                    </div>
+                    <span className={`text-[9px] font-extrabold py-0.5 px-1.5 rounded-full ${currentView === "organizations" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{organizations.length}</span>
                   </button>
 
                   <button 
                     onClick={() => setCurrentView("sponsors")}
-                    className={`flex items-center justify-between px-3 py-1.5 rounded-lg font-semibold text-xs text-left transition-all ${currentView === "sponsors" ? "text-blue-700 bg-blue-50 font-bold" : "text-slate-400 hover:text-blue-600"}`}
+                    className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg font-semibold text-xs text-left transition-all ${currentView === "sponsors" ? "text-blue-700 bg-blue-50 font-bold" : "text-slate-500 hover:text-blue-600"}`}
                   >
-                    <span>Sponsors</span>
-                    <span className={`text-[9px] font-extrabold py-0.5 px-2 rounded-full ${currentView === "sponsors" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{sponsors.length}</span>
+                    <div className="flex items-center gap-2">
+                      <Sparkles size={13} className="shrink-0" />
+                      <span>{t("dash.sponsors", "Sponsors")}</span>
+                    </div>
+                    <span className={`text-[9px] font-extrabold py-0.5 px-1.5 rounded-full ${currentView === "sponsors" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{sponsors.length}</span>
                   </button>
 
                   <button 
                     onClick={() => setCurrentView("exhibitors")}
-                    className={`flex items-center justify-between px-3 py-1.5 rounded-lg font-semibold text-xs text-left transition-all ${currentView === "exhibitors" ? "text-blue-700 bg-blue-50 font-bold" : "text-slate-400 hover:text-blue-600"}`}
+                    className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg font-semibold text-xs text-left transition-all ${currentView === "exhibitors" ? "text-blue-700 bg-blue-50 font-bold" : "text-slate-500 hover:text-blue-600"}`}
                   >
-                    <span>Exhibitors</span>
-                    <span className={`text-[9px] font-extrabold py-0.5 px-2 rounded-full ${currentView === "exhibitors" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{exhibitors.length}</span>
+                    <div className="flex items-center gap-2">
+                      <Store size={13} className="shrink-0" />
+                      <span>{t("dash.exhibitors", "Exhibitors")}</span>
+                    </div>
+                    <span className={`text-[9px] font-extrabold py-0.5 px-1.5 rounded-full ${currentView === "exhibitors" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{exhibitors.length}</span>
                   </button>
 
                   <button 
                     onClick={() => setCurrentView("speakers")}
-                    className={`flex items-center justify-between px-3 py-1.5 rounded-lg font-semibold text-xs text-left transition-all ${currentView === "speakers" ? "text-blue-700 bg-blue-50 font-bold" : "text-slate-400 hover:text-blue-600"}`}
+                    className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg font-semibold text-xs text-left transition-all ${currentView === "speakers" ? "text-blue-700 bg-blue-50 font-bold" : "text-slate-500 hover:text-blue-600"}`}
                   >
-                    <span>Speakers</span>
-                    <span className={`text-[9px] font-extrabold py-0.5 px-2 rounded-full ${currentView === "speakers" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{getUniqueSpeakersCount()}</span>
+                    <div className="flex items-center gap-2">
+                      <Mic2 size={13} className="shrink-0" />
+                      <span>{t("dash.speakers", "Speakers")}</span>
+                    </div>
+                    <span className={`text-[9px] font-extrabold py-0.5 px-1.5 rounded-full ${currentView === "speakers" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{getUniqueSpeakersCount()}</span>
                   </button>
                 </div>
               )}
@@ -1268,66 +1621,83 @@ export default function Home() {
 
             <button 
               onClick={() => { setCurrentView("floor-plan"); setActiveFloorPlanId(null); }}
-              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl font-bold text-xs transition-all text-left ${currentView === "floor-plan" ? "bg-blue-600 text-white shadow-xs" : "text-slate-500 hover:bg-slate-50 hover:text-blue-600"}`}
+              className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl font-bold text-xs transition-all text-left group ${currentView === "floor-plan" ? "bg-blue-600 text-white shadow-xs" : "text-slate-600 hover:bg-slate-50 hover:text-blue-600"}`}
             >
-              <Map size={15} />
-              <span>Floor Plans</span>
-              <span className={`ml-auto text-[9px] font-extrabold py-0.5 px-2 rounded-full ${currentView === "floor-plan" ? "bg-white/25 text-white" : "bg-slate-100 text-slate-500"}`}>{floorPlans.length}</span>
+              <div className="flex items-center gap-2.5">
+                <Layers size={15} className={`shrink-0 ${currentView === "floor-plan" ? "text-white" : "text-slate-400 group-hover:text-blue-600"}`} />
+                <span>{t("dash.floorPlan", "Floor Plans")}</span>
+              </div>
+              <span className={`text-[9px] font-extrabold py-0.5 px-2 rounded-full ${currentView === "floor-plan" ? "bg-white/25 text-white" : "bg-slate-100 text-slate-500"}`}>{floorPlans.length}</span>
             </button>
 
             <button 
               onClick={() => setCurrentView("tickets")}
-              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl font-bold text-xs transition-all text-left ${currentView === "tickets" ? "bg-blue-600 text-white shadow-xs" : "text-slate-500 hover:bg-slate-50 hover:text-blue-600"}`}
+              className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl font-bold text-xs transition-all text-left group ${currentView === "tickets" ? "bg-blue-600 text-white shadow-xs" : "text-slate-600 hover:bg-slate-50 hover:text-blue-600"}`}
             >
-              <Ticket size={15} />
-              <span>Tickets</span>
+              <Ticket size={15} className={`shrink-0 ${currentView === "tickets" ? "text-white" : "text-slate-400 group-hover:text-blue-600"}`} />
+              <span>{t("dash.tickets", "Tickets")}</span>
             </button>
 
             <button 
               onClick={() => setCurrentView("forms")}
-              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl font-bold text-xs transition-all text-left ${currentView === "forms" ? "bg-blue-600 text-white shadow-xs" : "text-slate-500 hover:bg-slate-50 hover:text-blue-600"}`}
+              className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl font-bold text-xs transition-all text-left group ${currentView === "forms" ? "bg-blue-600 text-white shadow-xs" : "text-slate-600 hover:bg-slate-50 hover:text-blue-600"}`}
             >
-              <FileText size={15} />
-              <span>Forms & Surveys</span>
-              <span className={`ml-auto text-[9px] font-extrabold py-0.5 px-2 rounded-full ${currentView === "forms" ? "bg-white/25 text-white" : "bg-slate-100 text-slate-500"}`}>{forms.length}</span>
+              <div className="flex items-center gap-2.5">
+                <ClipboardList size={15} className={`shrink-0 ${currentView === "forms" ? "text-white" : "text-slate-400 group-hover:text-blue-600"}`} />
+                <span>{t("dash.forms", "Forms & Surveys")}</span>
+              </div>
+              <span className={`text-[9px] font-extrabold py-0.5 px-2 rounded-full ${currentView === "forms" ? "bg-white/25 text-white" : "bg-slate-100 text-slate-500"}`}>{forms.length}</span>
+            </button>
+
+            <button 
+              onClick={() => setCurrentView("rsvp")}
+              className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl font-bold text-xs transition-all text-left group ${currentView === "rsvp" ? "bg-blue-600 text-white shadow-xs" : "text-slate-600 hover:bg-slate-50 hover:text-blue-600"}`}
+            >
+              <div className="flex items-center gap-2.5">
+                <CheckCircle2 size={15} className={`shrink-0 ${currentView === "rsvp" ? "text-white" : "text-slate-400 group-hover:text-blue-600"}`} />
+                <span>{t("dash.rsvp", "RSVP")}</span>
+              </div>
+              <span className={`text-[9px] font-extrabold py-0.5 px-2 rounded-full ${currentView === "rsvp" ? "bg-white/25 text-white" : "bg-slate-100 text-slate-500"}`}>{rsvps.length}</span>
             </button>
 
             <button 
               onClick={() => setCurrentView("check-in")}
-              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl font-bold text-xs transition-all text-left ${currentView === "check-in" ? "bg-blue-600 text-white shadow-xs" : "text-slate-500 hover:bg-slate-50 hover:text-blue-600"}`}
+              className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl font-bold text-xs transition-all text-left group ${currentView === "check-in" ? "bg-blue-600 text-white shadow-xs" : "text-slate-600 hover:bg-slate-50 hover:text-blue-600"}`}
             >
-              <CheckCircle2 size={15} />
-              <span>Check In</span>
+              <QrCode size={15} className={`shrink-0 ${currentView === "check-in" ? "text-white" : "text-slate-400 group-hover:text-blue-600"}`} />
+              <span>{t("dash.checkIn", "Check In")}</span>
             </button>
 
             <button 
               onClick={() => setCurrentView("my-team")}
-              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl font-bold text-xs transition-all text-left ${currentView === "my-team" ? "bg-blue-600 text-white shadow-xs" : "text-slate-500 hover:bg-slate-50 hover:text-blue-600"}`}
+              className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl font-bold text-xs transition-all text-left group ${currentView === "my-team" ? "bg-blue-600 text-white shadow-xs" : "text-slate-600 hover:bg-slate-50 hover:text-blue-600"}`}
             >
-              <ShieldAlert size={15} />
-              <span>My Team</span>
+              <ShieldCheck size={15} className={`shrink-0 ${currentView === "my-team" ? "text-white" : "text-slate-400 group-hover:text-blue-600"}`} />
+              <span>{t("dash.myTeam", "My Team")}</span>
             </button>
 
             <button 
               onClick={() => setCurrentView("analytics")}
-              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl font-bold text-xs transition-all text-left ${currentView === "analytics" ? "bg-blue-600 text-white shadow-xs" : "text-slate-500 hover:bg-slate-50 hover:text-blue-600"}`}
+              className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl font-bold text-xs transition-all text-left group ${currentView === "analytics" ? "bg-blue-600 text-white shadow-xs" : "text-slate-600 hover:bg-slate-50 hover:text-blue-600"}`}
             >
-              <BarChart3 size={15} />
-              <span>Analytics</span>
+              <BarChart3 size={15} className={`shrink-0 ${currentView === "analytics" ? "text-white" : "text-slate-400 group-hover:text-blue-600"}`} />
+              <span>{t("dash.analytics", "Analytics")}</span>
             </button>
 
             <button 
               onClick={() => setCurrentView("communications")}
-              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl font-bold text-xs transition-all text-left ${currentView === "communications" ? "bg-blue-600 text-white shadow-xs" : "text-slate-500 hover:bg-slate-50 hover:text-blue-600"}`}
+              className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl font-bold text-xs transition-all text-left group ${currentView === "communications" ? "bg-blue-600 text-white shadow-xs" : "text-slate-600 hover:bg-slate-50 hover:text-blue-600"}`}
             >
-              <Mail size={15} />
-              <span>Communications</span>
+              <Mail size={15} className={`shrink-0 ${currentView === "communications" ? "text-white" : "text-slate-400 group-hover:text-blue-600"}`} />
+              <span>{t("dash.communications", "Communications")}</span>
             </button>
           </nav>
         </div>
 
+
+
         {/* Sidebar Footer: User Profile Pill & Role Switcher */}
-        <div className="pt-4 border-t border-slate-150 relative">
+        <div className="pt-3 border-t border-slate-150 relative">
           <div 
             onClick={() => setProfileDropdownOpen(o => !o)}
             className="flex items-center justify-between p-2 rounded-2xl hover:bg-slate-50 cursor-pointer transition-colors"
@@ -1349,52 +1719,79 @@ export default function Home() {
           {/* Profile Dropdown */}
           {profileDropdownOpen && (
             <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-slate-200 rounded-2xl shadow-xl p-2 space-y-1 z-50 animate-scale-up">
+              {/* 1. My Profile */}
               <button
                 onClick={() => {
                   setProfileDropdownOpen(false);
                   setCurrentView("profile");
                 }}
-                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-slate-800 hover:bg-slate-50 flex items-center gap-2 transition-colors cursor-pointer"
+                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-slate-800 hover:bg-slate-50 flex items-center gap-2.5 transition-colors cursor-pointer"
               >
-                <User size={14} className="text-blue-600" />
-                <span>My Networking Profile</span>
+                <User size={14} className="text-slate-500 shrink-0" />
+                <span>{t("nav.myProfile", "My Profile")}</span>
               </button>
 
+              {/* 2. My Tickets */}
               <button
-                onClick={() => setCurrentView("home")}
-                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors cursor-pointer"
+                onClick={() => {
+                  setProfileDropdownOpen(false);
+                  setCurrentView("visitor-portal");
+                }}
+                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-emerald-700 hover:bg-emerald-50 flex items-center justify-between transition-colors cursor-pointer"
               >
-                <HomeIcon size={14} />
-                <span>Public Home</span>
+                <div className="flex items-center gap-2.5">
+                  <Ticket size={14} className="text-emerald-600 shrink-0" />
+                  <span>{t("nav.myTickets", "My Tickets")}</span>
+                </div>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500 text-white font-black text-[10px]">
+                  {visitorRegistrations.length}
+                </span>
               </button>
 
+              {/* 3. Add an Event in Menu */}
+              <button
+                onClick={() => {
+                  setProfileDropdownOpen(false);
+                  setCurrentView("create-event");
+                }}
+                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-blue-600 hover:bg-blue-50 flex items-center gap-2.5 transition-colors cursor-pointer"
+              >
+                <Plus size={14} className="text-blue-600 shrink-0 stroke-[2.5]" />
+                <span>{t("nav.addEvent", "Add an Event")}</span>
+              </button>
+
+              {/* 4. Organizer Center */}
               <button
                 onClick={() => {
                   setProfileDropdownOpen(false);
                   setCurrentView("events-hub");
                 }}
-                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-blue-700 hover:bg-blue-50 flex items-center gap-2 transition-colors cursor-pointer"
+                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition-colors cursor-pointer"
               >
-                <Layers size={14} />
-                <span>Organizer Center</span>
+                <Building2 size={14} className="text-slate-500 shrink-0" />
+                <span>{t("nav.organizerCenter", "Organizer Center")}</span>
               </button>
 
+              {/* 5. Public Home */}
               <button
-                onClick={() => handleToggleRole("visitor")}
-                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 transition-colors cursor-pointer"
+                onClick={() => {
+                  setProfileDropdownOpen(false);
+                  setCurrentView("home");
+                }}
+                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition-colors cursor-pointer"
               >
-                <Compass size={14} />
-                <span>Switch to Visitor Mode</span>
+                <HomeIcon size={14} className="text-slate-400 shrink-0" />
+                <span>{t("nav.publicHome", "Public Home")}</span>
               </button>
 
               <div className="h-px bg-slate-100 my-1" />
 
               <button
                 onClick={handleSignOut}
-                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-2 transition-colors cursor-pointer"
+                className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-2.5 transition-colors cursor-pointer"
               >
-                <LogOut size={14} />
-                <span>Sign Out</span>
+                <LogOut size={14} className="text-rose-500 shrink-0" />
+                <span>{t("nav.signOut", "Sign Out")}</span>
               </button>
             </div>
           )}
@@ -1406,18 +1803,28 @@ export default function Home() {
       <main className="flex-1 min-w-0 flex flex-col">
         {/* Dynamic content views router */}
         <div className={`flex-1 ${
-          currentView === "floor-plan" && activeFloorPlanId !== null && initialPreviewMode 
-            ? "overflow-hidden h-[100dvh] flex flex-col p-0" 
-            : `overflow-y-auto ${currentView === "floor-plan" && activeFloorPlanId !== null ? "p-4" : "p-8 md:p-12"}`
+          isEditingFloorPlan
+            ? "overflow-hidden h-screen flex flex-col p-0" 
+            : "overflow-y-auto p-6 md:p-8"
         }`}>
           {currentView === "overview" && (
             <Overview 
               eventDetails={eventDetails}
               attendees={attendees}
+              pending={pending}
               sessions={sessions}
               tickets={tickets}
+              sponsors={sponsors}
+              exhibitors={exhibitors}
+              floorPlans={floorPlans}
+              forms={forms}
+              formSubmissions={formSubmissions}
+              rsvps={rsvps}
+              rsvpSettings={rsvpSettings}
+              team={team}
               onSwitchView={setCurrentView}
               onOpenModal={handleOpenModal}
+              onPreviewLandingPage={() => setCurrentView("event-landing")}
             />
           )}
 
@@ -1439,7 +1846,7 @@ export default function Home() {
             />
           )}
 
-          {currentView === "floor-plan" && activeFloorPlanId === null && (
+          {currentView === "floor-plan" && !isEditingFloorPlan && (
             <FloorPlanGallery
               floorPlans={floorPlans}
               onEdit={(id) => setActiveFloorPlanId(id)}
@@ -1450,7 +1857,7 @@ export default function Home() {
             />
           )}
 
-          {currentView === "floor-plan" && activeFloorPlanId !== null && activePlan && (
+          {currentView === "floor-plan" && isEditingFloorPlan && (
             <FloorPlanModifier 
               exhibitors={exhibitors.map(ex => {
                 const org = organizations.find(o => String(o.id) === String(ex.org_id));
@@ -1512,10 +1919,13 @@ export default function Home() {
                   return exists ? prev.map(f => f.id === saved.id ? saved : f) : [saved, ...prev];
                 });
               }}
+              onArchiveForm={async (formId) => {
+                await archiveForm(formId);
+                setForms(prev => prev.map(f => f.id === formId ? { ...f, status: 'archived', isArchived: true } : f));
+              }}
               onDeleteForm={async (formId) => {
-                await deleteForm(formId);
-                setForms(prev => prev.filter(f => f.id !== formId));
-                setFormSubmissions(prev => prev.filter(s => s.formId !== formId));
+                await archiveForm(formId);
+                setForms(prev => prev.map(f => f.id === formId ? { ...f, status: 'archived', isArchived: true } : f));
               }}
               onSubmitResponse={async (sub) => {
                 const saved = await submitFormResponse(sub, activeEventId);
@@ -1525,7 +1935,49 @@ export default function Home() {
             />
           )}
 
-          {!["overview", "calendar", "page-builder", "event-details", "forms"].includes(currentView) && currentView !== "floor-plan" && (
+          {currentView === "rsvp" && (
+            <RSVPView
+              rsvps={rsvps}
+              rsvpSettings={rsvpSettings}
+              eventDetails={eventDetails}
+              activeEventId={activeEventId}
+              onSaveRSVPSettings={async (newSettings) => {
+                const saved = await upsertRSVPSettings(newSettings, activeEventId);
+                setRsvpSettings(saved);
+              }}
+              onSubmitRSVP={async (rsvpData) => {
+                const saved = await submitGuestRSVP(rsvpData, activeEventId);
+                setRsvps(prev => {
+                  const exists = prev.some(r => r.id === saved.id);
+                  return exists ? prev.map(r => r.id === saved.id ? saved : r) : [saved, ...prev];
+                });
+                return { success: true, rsvp: saved, assignedStatus: saved.status };
+              }}
+              onUpdateRSVPStatus={async (rsvpId, newStatus, extra) => {
+                const updated = await updateRSVPStatus(rsvpId, newStatus, activeEventId, extra);
+                setRsvps(prev => prev.map(r => r.id === rsvpId ? { ...r, ...updated, status: newStatus || r.status } : r));
+              }}
+              onArchiveRSVP={async (rsvpId) => {
+                await archiveRSVP(rsvpId, activeEventId);
+                setRsvps(prev => prev.map(r => r.id === rsvpId ? { ...r, status: 'archived' } : r));
+              }}
+              onDeleteRSVP={async (rsvpId) => {
+                await archiveRSVP(rsvpId, activeEventId);
+                setRsvps(prev => prev.map(r => r.id === rsvpId ? { ...r, status: 'archived' } : r));
+              }}
+              onRefreshData={async () => {
+                const [freshRsvps, freshSettings] = await Promise.all([
+                  fetchRSVPs(activeEventId),
+                  fetchRSVPSettings(activeEventId)
+                ]);
+                if (freshRsvps) setRsvps(freshRsvps);
+                if (freshSettings) setRsvpSettings(freshSettings);
+              }}
+              onOpenPublicRSVP={() => setShowGlobalPublicRsvp(true)}
+            />
+          )}
+
+          {!["overview", "calendar", "page-builder", "event-details", "forms", "rsvp"].includes(currentView) && currentView !== "floor-plan" && (
             <GenericTableView 
               viewName={currentView}
               state={{
@@ -1538,7 +1990,8 @@ export default function Home() {
                 tickets,
                 team,
                 sessions,
-                forms
+                forms,
+                rsvps
               }}
               onUpdateState={handleUpdateState}
               onOpenModal={handleOpenModal}
@@ -1550,8 +2003,21 @@ export default function Home() {
       </main>
 
 
-      {/* Record Creation Modals */}
-      {activeModalType && (
+      {/* Ticket Drawer Slide-Over */}
+      <TicketDrawer
+        isOpen={activeModalType === "ticket"}
+        onClose={closeModal}
+        ticket={editingItem}
+        forms={forms}
+        onSaveTicket={handleSaveTicket}
+        onUploadFile={uploadFileToBucket}
+        activeEventId={activeEventId}
+        eventTitle={eventDetails?.title || "Eventzone Summit"}
+        onSwitchView={setCurrentView}
+      />
+
+      {/* Record Creation Modals (Other types) */}
+      {activeModalType && activeModalType !== "ticket" && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
           <div className="bg-white border border-slate-150 rounded-3xl p-8 max-w-md w-full shadow-2xl flex flex-col gap-6 relative animate-scale-up">
             <header className="flex justify-between items-center select-none">
@@ -1560,14 +2026,13 @@ export default function Home() {
                 {activeModalType === "org" && "Add Partner Organization"}
                 {activeModalType === "sponsor" && "Add Event Sponsor"}
                 {activeModalType === "exhibitor" && "Register Exhibitor"}
-                {activeModalType === "ticket" && "Create Ticket Tier"}
                 {activeModalType === "team" && "Invite Team Member"}
               </h3>
               <button 
                 onClick={closeModal}
-                className="w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 hover:text-rose-500 hover:border-rose-100 transition-colors cursor-pointer"
+                className="w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 hover:text-rose-500 hover:border-rose-100 transition-colors cursor-pointer text-sm font-bold"
               >
-                <X size={16} />
+                ✕
               </button>
             </header>
 
@@ -1645,19 +2110,6 @@ export default function Home() {
                 </>
               )}
 
-              {activeModalType === "ticket" && (
-                <>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Ticket Tier Name</label>
-                    <input type="text" required value={modalName} onChange={(e) => setModalName(e.target.value)} placeholder="e.g. VIP Access Pass" className="px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-blue-600" />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Price ($ USD)</label>
-                    <input type="number" required value={modalPrice} onChange={(e) => setModalPrice(e.target.value)} placeholder="199" className="px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-blue-600" />
-                  </div>
-                </>
-              )}
-
               {activeModalType === "team" && (
                 <>
                   <div className="flex flex-col gap-1.5">
@@ -1681,6 +2133,42 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* Global Public RSVP Modal (Preview & Direct Trigger) */}
+      <PublicRSVPModal
+        isOpen={showGlobalPublicRsvp}
+        onClose={() => setShowGlobalPublicRsvp(false)}
+        event={eventDetails || { id: activeEventId, title: "Eventzone Summit" }}
+        rsvpSettings={rsvpSettings}
+        existingHeadcount={rsvps.filter(r => (r.status || 'attending').toLowerCase() === 'attending').reduce((sum, r) => sum + 1 + (r.plusOnes || r.plus_ones || 0), 0)}
+        onSubmitRSVP={async (rsvpData) => {
+          const saved = await submitGuestRSVP(rsvpData, activeEventId);
+          setRsvps(prev => {
+            const exists = prev.some(r => r.id === saved.id);
+            return exists ? prev.map(r => r.id === saved.id ? saved : r) : [saved, ...prev];
+          });
+          return { success: true, rsvp: saved, assignedStatus: saved.status };
+        }}
+        currentUser={currentUser}
+      />
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <LanguageProvider>
+      <Suspense fallback={
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center font-sans">
+          <img 
+            src="https://i.imgur.com/jFDrQbM.png" 
+            alt="eventzone" 
+            className="h-8 w-auto object-contain opacity-80 animate-pulse" 
+          />
+        </div>
+      }>
+        <HomeContent />
+      </Suspense>
+    </LanguageProvider>
   );
 }

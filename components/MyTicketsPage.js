@@ -1,0 +1,617 @@
+/* eslint-disable @next/next/no-img-element */
+"use client";
+
+import React, { useState, useEffect, useId } from "react";
+import { 
+  Ticket, Calendar, MapPin, QrCode, Download, 
+  Printer, ArrowLeft, Search, Filter, Sparkles, 
+  ExternalLink, Layers, CheckCircle2, Copy, Check, 
+  X, ShieldCheck, Share2, Eye, User, Clock, Building2
+} from "lucide-react";
+import QRCode from "qrcode";
+import { useLanguage } from "../lib/i18n";
+import UniversalTopBar from "./UniversalTopBar";
+
+export default function MyTicketsPage({
+  registrations = [],
+  events = [],
+  currentUser,
+  onGoToHome,
+  onOpenAuth,
+  onOpenProfile,
+  onOpenCreationWizard,
+  onOpenEventsHub,
+  onSignOut,
+  onViewFloorPlan,
+  onViewLivePage
+}) {
+  const { t, lang, isRTL } = useLanguage();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterTier, setFilterTier] = useState("all");
+  const [copiedId, setCopiedId] = useState(null);
+
+  // QR Code data URLs: { [regId]: string }
+  const [qrCodeUrls, setQrCodeUrls] = useState({});
+  
+  // Enlarged QR modal
+  const [selectedQrPass, setSelectedQrPass] = useState(null);
+
+  // Printable A6 Badge Modal
+  const [selectedBadgePass, setSelectedBadgePass] = useState(null);
+
+  // Generate QR codes for all registrations
+  useEffect(() => {
+    const generateQRs = async () => {
+      const urls = {};
+      for (const reg of registrations) {
+        try {
+          const qrData = JSON.stringify({
+            badgeCode: reg.badgeCode,
+            eventId: reg.eventId,
+            eventTitle: reg.eventTitle,
+            attendeeName: reg.attendeeName || currentUser?.fullName || "Attendee",
+            ticketType: reg.ticketType,
+            verified: true,
+            platform: "Eventzone"
+          });
+          const url = await QRCode.toDataURL(qrData, {
+            width: 320,
+            margin: 1,
+            color: { dark: "#0f172a", light: "#ffffff" }
+          });
+          urls[reg.id] = url;
+        } catch (e) {
+          console.warn("QR code generation error:", e);
+        }
+      }
+      setQrCodeUrls(urls);
+    };
+
+    if (registrations.length > 0) {
+      generateQRs();
+    }
+  }, [registrations, currentUser]);
+
+  const handleCopyCode = (code, id) => {
+    navigator.clipboard?.writeText(code);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleDownloadQR = (reg) => {
+    const url = qrCodeUrls[reg.id];
+    if (!url) return;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Eventzone-Pass-${reg.badgeCode || reg.id}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const handleAddToCalendar = (reg) => {
+    const title = encodeURIComponent(reg.eventTitle || "Conference Event");
+    const details = encodeURIComponent(`Your badge code is: ${reg.badgeCode}\nAccess Tier: ${reg.ticketType}\nIssued by Eventzone`);
+    const location = encodeURIComponent(reg.location || "Venue");
+    const googleCalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&location=${location}`;
+    window.open(googleCalUrl, "_blank");
+  };
+
+  const filteredRegistrations = registrations.filter(reg => {
+    const q = searchQuery.toLowerCase().trim();
+    const matchesSearch = !q || 
+      (reg.eventTitle || "").toLowerCase().includes(q) ||
+      (reg.location || "").toLowerCase().includes(q) ||
+      (reg.badgeCode || "").toLowerCase().includes(q) ||
+      (reg.ticketType || "").toLowerCase().includes(q);
+
+    const matchesTier = filterTier === "all" || 
+      (filterTier === "vip" && (reg.ticketType || "").toLowerCase().includes("vip")) ||
+      (filterTier === "standard" && !(reg.ticketType || "").toLowerCase().includes("vip"));
+
+    return matchesSearch && matchesTier;
+  });
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900 selection:bg-blue-600 selection:text-white">
+      {/* Universal SaaS Top Bar */}
+      <UniversalTopBar
+        currentUser={currentUser}
+        registrations={registrations}
+        onGoToHome={onGoToHome}
+        onOpenAuth={onOpenAuth}
+        onOpenProfile={onOpenProfile}
+        onOpenPassesModal={() => {}}
+        onOpenCreationWizard={onOpenCreationWizard}
+        onOpenEventsHub={onOpenEventsHub}
+        onSignOut={onSignOut}
+      />
+
+      {/* Main Container */}
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 space-y-8">
+        
+        {/* Header Title & Breadcrumb */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-slate-200">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <button 
+                onClick={onGoToHome}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-blue-600 transition-colors cursor-pointer"
+              >
+                <ArrowLeft size={14} />
+                <span>{t("event.backToEvents", "Back to Events")}</span>
+              </button>
+              <span className="text-slate-300">•</span>
+              <span className="text-xs font-extrabold text-blue-600 uppercase tracking-wider">
+                {t("nav.myTickets", "My Tickets")}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 shadow-xs shrink-0">
+                <Ticket size={22} className="stroke-[2.2]" />
+              </div>
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                  {t("passes.title", "My Digital Passes")}
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-500 font-medium">
+                  {t("passes.subtitle", "Your active credentials, QR codes, and entry badges.")}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Counter Badges */}
+          <div className="flex items-center gap-2 self-start md:self-auto">
+            <div className="px-4 py-2 bg-white border border-slate-200 rounded-2xl shadow-xs flex items-center gap-2.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+              <div className="text-left">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Verified Passes</span>
+                <span className="text-sm font-black text-slate-900">{registrations.length} Active</span>
+              </div>
+            </div>
+
+            <button
+              onClick={onGoToHome}
+              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-bold shadow-sm shadow-blue-600/20 hover:shadow transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              <Sparkles size={14} />
+              <span>{t("passes.browseEvents", "Browse Events")}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Search & Filter Bar */}
+        {registrations.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
+            <div className="relative w-full sm:w-80">
+              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={t("tickets.searchPlaceholder", "Search tickets by event, venue, badge code...")}
+                className="w-full pl-9 pr-4 py-2 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 outline-none transition-all"
+              />
+            </div>
+
+            <div className="flex items-center gap-1.5 w-full sm:w-auto">
+              <button
+                onClick={() => setFilterTier("all")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  filterTier === "all"
+                    ? "bg-slate-900 text-white shadow-xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                All ({registrations.length})
+              </button>
+              <button
+                onClick={() => setFilterTier("vip")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  filterTier === "vip"
+                    ? "bg-amber-500 text-white shadow-xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                VIP Passes
+              </button>
+              <button
+                onClick={() => setFilterTier("standard")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  filterTier === "standard"
+                    ? "bg-blue-600 text-white shadow-xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                Standard
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Empty State */}
+        {registrations.length === 0 ? (
+          <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center max-w-lg mx-auto shadow-sm space-y-4 my-8">
+            <div className="w-16 h-16 rounded-3xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto border border-blue-100 shadow-inner">
+              <Ticket size={32} className="stroke-[1.8]" />
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-slate-900">
+                {t("passes.noPasses", "No Active Passes Yet")}
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-500 max-w-sm mx-auto mt-1">
+                {t("passes.noPassesDesc", "Register for upcoming conferences to access your instant digital badges here.")}
+              </p>
+            </div>
+            <button
+              onClick={onGoToHome}
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/20 hover:shadow-lg transition-all cursor-pointer inline-flex items-center gap-2"
+            >
+              <Sparkles size={15} />
+              <span>{t("passes.browseEvents", "Browse Events")}</span>
+            </button>
+          </div>
+        ) : filteredRegistrations.length === 0 ? (
+          <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-2">
+            <p className="text-xs text-slate-500 font-bold">No tickets match your search filters.</p>
+            <button
+              onClick={() => {
+                setSearchQuery("");
+                setFilterTier("all");
+              }}
+              className="text-xs text-blue-600 hover:underline font-bold cursor-pointer"
+            >
+              Clear filters
+            </button>
+          </div>
+        ) : (
+          /* Tickets Grid */
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {filteredRegistrations.map(reg => {
+              const isVip = (reg.ticketType || "").toLowerCase().includes("vip");
+              const qrUrl = qrCodeUrls[reg.id];
+
+              return (
+                <div 
+                  key={reg.id}
+                  className="bg-white border border-slate-200/90 rounded-3xl shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col justify-between group"
+                >
+                  {/* Top Header Strip with Tier Ribbon */}
+                  <div className={`px-6 py-3.5 flex items-center justify-between border-b ${
+                    isVip 
+                      ? "bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-amber-200/60" 
+                      : "bg-gradient-to-r from-blue-600/10 via-blue-600/5 to-transparent border-slate-100"
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border shadow-2xs ${
+                        isVip 
+                          ? "bg-amber-500 text-white border-amber-600" 
+                          : "bg-blue-600 text-white border-blue-700"
+                      }`}>
+                        {reg.ticketType || "General Admission"}
+                      </span>
+                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80 flex items-center gap-1">
+                        <CheckCircle2 size={11} className="stroke-[2.5]" />
+                        <span>Confirmed</span>
+                      </span>
+                    </div>
+
+                    {/* Badge ID with Copy */}
+                    <button
+                      onClick={() => handleCopyCode(reg.badgeCode || reg.id, reg.id)}
+                      className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-100/80 hover:bg-slate-200/80 text-slate-700 text-[11px] font-mono font-bold transition-all cursor-pointer"
+                      title="Click to copy badge code"
+                    >
+                      <span>{reg.badgeCode || `#${String(reg.id).slice(0, 8)}`}</span>
+                      {copiedId === reg.id ? (
+                        <Check size={12} className="text-emerald-600" />
+                      ) : (
+                        <Copy size={12} className="text-slate-400" />
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Main Ticket Body */}
+                  <div className="p-6 flex flex-col sm:flex-row items-center sm:items-start justify-between gap-6">
+                    {/* Left: Event Details & Attendee */}
+                    <div className="space-y-3.5 flex-1 text-left">
+                      <div>
+                        <h3 className="text-lg font-black text-slate-900 leading-snug group-hover:text-blue-600 transition-colors">
+                          {reg.eventTitle}
+                        </h3>
+                        <div className="flex flex-wrap items-center gap-y-1 gap-x-3 mt-1.5 text-xs text-slate-500 font-medium">
+                          {reg.startDate && (
+                            <span className="flex items-center gap-1">
+                              <Calendar size={13} className="text-slate-400" />
+                              <span>{reg.startDate}</span>
+                            </span>
+                          )}
+                          {reg.location && (
+                            <span className="flex items-center gap-1">
+                              <MapPin size={13} className="text-slate-400" />
+                              <span className="truncate max-w-[200px]">{reg.location}</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Attendee Info Box */}
+                      <div className="p-3 bg-slate-50/80 rounded-2xl border border-slate-150 flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs shrink-0">
+                          <User size={15} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs font-bold text-slate-800 block truncate">
+                            {reg.attendeeName || currentUser?.fullName || "Attendee"}
+                          </span>
+                          <span className="text-[10px] text-slate-400 truncate block">
+                            {reg.email || currentUser?.email || "Registered Attendee"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: Interactive Live QR Code */}
+                    <div className="flex flex-col items-center shrink-0">
+                      <div 
+                        onClick={() => setSelectedQrPass(reg)}
+                        className="p-2.5 bg-white border border-slate-200 rounded-2xl shadow-xs hover:shadow-md hover:border-blue-500 transition-all cursor-pointer group/qr relative"
+                        title="Click to enlarge QR Code"
+                      >
+                        {qrUrl ? (
+                          <img 
+                            src={qrUrl} 
+                            alt="QR Pass" 
+                            className="w-24 h-24 sm:w-28 sm:h-28 object-contain rounded-lg"
+                          />
+                        ) : (
+                          <div className="w-24 h-24 sm:w-28 sm:h-28 bg-slate-100 rounded-lg flex items-center justify-center">
+                            <QrCode size={32} className="text-slate-300 animate-pulse" />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-slate-900/60 rounded-2xl opacity-0 group-hover/qr:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-bold gap-1">
+                          <Eye size={13} />
+                          <span>Enlarge</span>
+                        </div>
+                      </div>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1.5">
+                        Scan at Gate
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Bottom Action Footer with Perforated Edge Style */}
+                  <div className="px-6 py-3 bg-slate-50/70 border-t border-slate-150 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      {/* Printable A6 Badge Action */}
+                      <button
+                        onClick={() => setSelectedBadgePass(reg)}
+                        className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                        title="Print Official A6 Conference Badge"
+                      >
+                        <Printer size={13} className="text-blue-600" />
+                        <span>{t("passes.printBadge", "Print Badge")}</span>
+                      </button>
+
+                      {/* Download QR */}
+                      <button
+                        onClick={() => handleDownloadQR(reg)}
+                        className="p-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                        title={t("passes.downloadQR", "Save QR Code")}
+                      >
+                        <Download size={13} />
+                      </button>
+
+                      {/* Add to Calendar */}
+                      <button
+                        onClick={() => handleAddToCalendar(reg)}
+                        className="p-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                        title="Add to Google Calendar"
+                      >
+                        <Calendar size={13} />
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      {/* View Floor Plan */}
+                      <button
+                        onClick={() => onViewFloorPlan && onViewFloorPlan(reg.eventId)}
+                        className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                      >
+                        <Layers size={13} className="text-slate-500" />
+                        <span>{t("event.floorPlan", "Floor Plan")}</span>
+                      </button>
+
+                      {/* View Event Details */}
+                      <button
+                        onClick={() => onViewLivePage && onViewLivePage(reg.eventId)}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-xs shadow-blue-600/20"
+                      >
+                        <span>{t("event.about", "Event")}</span>
+                        <ExternalLink size={12} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </main>
+
+      {/* ==================================================================== */}
+      {/* 1. ENLARGED QR PASS MODAL                                            */}
+      {/* ==================================================================== */}
+      {selectedQrPass && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white border border-slate-200 w-full max-w-sm rounded-3xl shadow-2xl p-6 text-center space-y-4 animate-scale-up relative">
+            <button
+              onClick={() => setSelectedQrPass(null)}
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 cursor-pointer font-bold"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto border border-blue-100">
+              <QrCode size={24} />
+            </div>
+
+            <div>
+              <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100 inline-block mb-1">
+                {selectedQrPass.ticketType}
+              </span>
+              <h3 className="text-base font-black text-slate-900 leading-tight">
+                {selectedQrPass.eventTitle}
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {selectedQrPass.attendeeName || currentUser?.fullName || "Attendee"}
+              </p>
+            </div>
+
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-center">
+              {qrCodeUrls[selectedQrPass.id] && (
+                <img 
+                  src={qrCodeUrls[selectedQrPass.id]} 
+                  alt="Enlarged QR Pass"
+                  className="w-56 h-56 object-contain rounded-xl shadow-xs"
+                />
+              )}
+            </div>
+
+            <div className="flex items-center justify-between text-xs px-2 font-mono text-slate-600 bg-slate-100 py-1.5 rounded-xl">
+              <span>Badge Code:</span>
+              <span className="font-bold text-blue-700">{selectedQrPass.badgeCode}</span>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => handleDownloadQR(selectedQrPass)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Download size={14} />
+                <span>Save QR Image</span>
+              </button>
+              <button
+                onClick={() => {
+                  const pass = selectedQrPass;
+                  setSelectedQrPass(null);
+                  setSelectedBadgePass(pass);
+                }}
+                className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md shadow-blue-600/20 flex items-center justify-center gap-1.5"
+              >
+                <Printer size={14} />
+                <span>Print Badge</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* 2. OFFICIAL A6 PRINTABLE CONFERENCE BADGE MODAL                      */}
+      {/* ==================================================================== */}
+      {selectedBadgePass && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-fade-in overflow-y-auto font-sans">
+          <div className="bg-white border border-slate-200 w-full max-w-md rounded-3xl shadow-2xl p-6 sm:p-8 text-center space-y-5 animate-scale-up relative my-8 text-slate-900">
+            <button
+              onClick={() => setSelectedBadgePass(null)}
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 cursor-pointer font-bold"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="flex items-center justify-center gap-2">
+              <Printer size={20} className="text-blue-600" />
+              <h3 className="text-lg font-black text-slate-900">Official A6 Conference Badge</h3>
+            </div>
+
+            {/* A6 Printable Badge Container (Ratio 105mm x 148mm ~ 1:1.41) */}
+            <div 
+              id="printable-badge"
+              className="w-full max-w-[320px] mx-auto bg-white border-2 border-slate-800 rounded-2xl shadow-xl overflow-hidden text-slate-900 flex flex-col justify-between min-h-[440px] relative"
+            >
+              {/* Lanyard Punch Hole Indicator */}
+              <div className="w-12 h-2.5 bg-slate-200 border border-slate-300 rounded-full mx-auto mt-2" />
+
+              {/* Event Header */}
+              <div className="p-4 bg-slate-900 text-white text-center mt-2">
+                <img 
+                  src="https://i.imgur.com/jFDrQbM.png" 
+                  alt="eventzone" 
+                  className="h-5 w-auto object-contain mx-auto filter brightness-0 invert opacity-90"
+                />
+                <h4 className="text-xs font-black uppercase tracking-wider mt-1 truncate">
+                  {selectedBadgePass.eventTitle}
+                </h4>
+              </div>
+
+              {/* Attendee Profile Section */}
+              <div className="p-4 space-y-2 text-center">
+                <div className="w-20 h-20 rounded-full bg-blue-100 border-2 border-blue-600 flex items-center justify-center mx-auto overflow-hidden shadow-inner">
+                  {currentUser?.avatar || currentUser?.avatar_url ? (
+                    <img src={currentUser.avatar || currentUser.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    <User size={36} className="text-blue-600" />
+                  )}
+                </div>
+
+                <div>
+                  <h2 className="text-xl font-black text-slate-900 tracking-tight leading-tight">
+                    {selectedBadgePass.attendeeName || currentUser?.fullName || "Conference Attendee"}
+                  </h2>
+                  <p className="text-xs font-bold text-slate-500">
+                    {currentUser?.companyName || currentUser?.jobTitle || "Verified Delegate"}
+                  </p>
+                </div>
+              </div>
+
+              {/* QR Code Verification Section */}
+              <div className="p-3 bg-slate-50 border-t border-b border-slate-200 flex items-center justify-center gap-3">
+                {qrCodeUrls[selectedBadgePass.id] && (
+                  <img 
+                    src={qrCodeUrls[selectedBadgePass.id]} 
+                    alt="QR" 
+                    className="w-16 h-16 object-contain"
+                  />
+                )}
+                <div className="text-left text-[11px] font-mono">
+                  <span className="text-[9px] uppercase font-bold text-slate-400 block">Badge ID</span>
+                  <span className="font-extrabold text-slate-900">{selectedBadgePass.badgeCode}</span>
+                  <span className="text-[9px] text-emerald-600 font-bold block mt-0.5">✓ Gate Pass Active</span>
+                </div>
+              </div>
+
+              {/* Bottom Tier Ribbon */}
+              <div className={`p-3 text-center text-xs font-black uppercase tracking-widest text-white ${
+                (selectedBadgePass.ticketType || "").toLowerCase().includes("vip")
+                  ? "bg-amber-500"
+                  : "bg-blue-600"
+              }`}>
+                {selectedBadgePass.ticketType || "General Admission"}
+              </div>
+            </div>
+
+            {/* Print & Close Buttons */}
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setSelectedBadgePass(null)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/20 transition-all cursor-pointer flex items-center justify-center gap-2"
+              >
+                <Printer size={15} />
+                <span>Print Document</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

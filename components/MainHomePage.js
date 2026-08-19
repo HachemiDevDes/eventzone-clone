@@ -7,9 +7,11 @@ import {
   Sparkles, ArrowRight, ChevronLeft, ChevronRight, 
   Building2, Search, Filter, Layers, ExternalLink, 
   CheckCircle2, Users, ShieldCheck, LogOut, ChevronDown, Plus, X, ArrowUp,
-  Smartphone, MessageSquare, QrCode as QrIcon, Star, Download, Zap, Share2, Check, UserCheck, User
+  Smartphone, MessageSquare, QrCode as QrIcon, Star, Download, Zap, Share2, Check, UserCheck, User, Globe
 } from "lucide-react";
 import QRCode from "qrcode";
+import { useLanguage } from "../lib/i18n";
+import UniversalTopBar from "./UniversalTopBar";
 
 export default function MainHomePage({
   events = [],
@@ -25,7 +27,9 @@ export default function MainHomePage({
   onSelectEventForDashboard,
   onViewFloorPlan,
   onViewLivePage,
-  onRegisterForEvent
+  onRegisterForEvent,
+  onOpenCreationWizard,
+  onSwitchToOrganizer
 }) {
   // Hero Carousel State
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
@@ -39,6 +43,10 @@ export default function MainHomePage({
   // Profile Dropdown State
   const [profileOpen, setProfileOpen] = useState(false);
 
+  // Language Selector State from global hook
+  const { t, lang, setLang, isRTL, languages } = useLanguage();
+  const [langMenuOpen, setLangMenuOpen] = useState(false);
+
   // RSVP Modal State
   const [rsvpEvent, setRsvpEvent] = useState(null);
   const [rsvpName, setRsvpName] = useState(currentUser?.fullName || "");
@@ -46,11 +54,9 @@ export default function MainHomePage({
   const [rsvpTier, setRsvpTier] = useState("VIP Access Pass");
   const [rsvpLoading, setRsvpLoading] = useState(false);
   const [rsvpSuccess, setRsvpSuccess] = useState(null);
-
-  // My Passes Modal
-  const [showPassesModal, setShowPassesModal] = useState(false);
   const [qrCodeUrls, setQrCodeUrls] = useState({});
 
+  // Hero Events slice
   const heroEvents = events.slice(0, 4);
 
   // Auto-rotate hero slides
@@ -154,325 +160,162 @@ export default function MainHomePage({
       {/* ==================================================================== */}
       {/* 1. TOP BAR NAVIGATION (LIGHT MODE)                                   */}
       {/* ==================================================================== */}
-      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-xl border-b border-slate-200 px-6 sm:px-8 py-3.5 flex items-center justify-between shadow-xs">
-        {/* Left: Eventzone Original Blue Logo Alone */}
-        <div className="flex items-center">
-          <div 
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            className="flex items-center cursor-pointer select-none group"
-            title="Eventzone Home"
-          >
-            <img 
-              src="https://i.imgur.com/jFDrQbM.png" 
-              alt="eventzone" 
-              className="h-7 w-auto object-contain transition-transform group-hover:scale-105" 
-            />
-          </div>
-        </div>
-
-        {/* Center: Quick Links in the middle */}
-        <nav className="hidden md:flex items-center gap-7">
-          <a 
-            href="#explore" 
-            className="text-xs font-bold text-slate-600 hover:text-blue-600 transition-colors"
-          >
-            Explore Events
-          </a>
-          <a 
-            href="#featured" 
-            className="text-xs font-bold text-slate-600 hover:text-blue-600 transition-colors"
-          >
-            Featured Summits
-          </a>
-          <a 
-            href="#categories" 
-            className="text-xs font-bold text-slate-600 hover:text-blue-600 transition-colors"
-          >
-            Categories
-          </a>
-          <a 
-            href="#mobile-app" 
-            className="text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors flex items-center gap-1"
-          >
-            <Smartphone size={13} />
-            <span>Mobile App</span>
-          </a>
-          <button 
-            onClick={() => {
-              if (!currentUser) {
-                onOpenAuth("signup");
-              } else {
-                onOpenEventsHub();
-              }
-            }}
-            className="text-xs font-bold text-slate-600 hover:text-blue-600 transition-colors cursor-pointer bg-transparent border-0"
-          >
-            For Organizers
-          </button>
-        </nav>
-
-        {/* Right: Auth / Profile Controls */}
-        <div className="flex items-center gap-3">
-          {currentUser ? (
-            <div className="relative">
-              <button
-                onClick={() => setProfileOpen(o => !o)}
-                className="flex items-center gap-2.5 p-1.5 pr-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-full transition-all cursor-pointer shadow-xs"
-              >
-                <img 
-                  src={currentUser.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80"} 
-                  alt="Avatar" 
-                  className="w-7 h-7 rounded-full object-cover border border-blue-500/40"
-                />
-                <div className="hidden sm:flex flex-col text-left">
-                  <span className="text-xs font-bold text-slate-800 leading-tight truncate max-w-[120px]">{currentUser.fullName}</span>
-                  <span className="text-[9px] font-semibold text-blue-600 uppercase tracking-wider">
-                    {currentUser.role === "organizer" ? "Organizer" : "Visitor"}
-                  </span>
-                </div>
-                <ChevronDown size={13} className={`text-slate-400 transition-transform ${profileOpen ? "rotate-180" : ""}`} />
-              </button>
-
-              {/* Profile Dropdown */}
-              {profileOpen && (
-                <div className="absolute top-full right-0 mt-2 w-64 bg-white border border-slate-200 rounded-2xl shadow-xl p-2 z-50 animate-scale-up space-y-1">
-                  <div className="px-3 py-2 border-b border-slate-100 mb-1">
-                    <span className="text-xs font-bold text-slate-900 block truncate">{currentUser.fullName}</span>
-                    <span className="text-[10px] text-slate-400 truncate block">{currentUser.email}</span>
-                  </div>
-
-                  {/* My Networking Profile Button */}
-                  <button
-                    onClick={() => {
-                      setProfileOpen(false);
-                      if (onOpenProfile) onOpenProfile();
-                    }}
-                    className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold text-slate-800 hover:bg-slate-100 flex items-center gap-2.5 transition-colors cursor-pointer"
-                  >
-                    <User size={15} className="text-blue-600" />
-                    <span>My Networking Profile</span>
-                  </button>
-
-                  {/* Organizer Center Button */}
-                  <button
-                    onClick={() => {
-                      setProfileOpen(false);
-                      onOpenEventsHub();
-                    }}
-                    className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold text-blue-700 hover:bg-blue-50 flex items-center gap-2.5 transition-colors cursor-pointer"
-                  >
-                    <Building2 size={15} />
-                    <span>Event Manager Center</span>
-                  </button>
-
-                  {/* My Passes Button */}
-                  <button
-                    onClick={() => {
-                      setProfileOpen(false);
-                      setShowPassesModal(true);
-                    }}
-                    className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold text-emerald-700 hover:bg-emerald-50 flex items-center justify-between transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Ticket size={15} />
-                      <span>My Digital Passes</span>
-                    </div>
-                    <span className="px-1.5 py-0.2 rounded-full bg-emerald-500 text-white font-black text-[10px]">
-                      {registrations.length}
-                    </span>
-                  </button>
-
-                  {/* Switch Role Toggle */}
-                  <button
-                    onClick={() => {
-                      setProfileOpen(false);
-                      onSwitchRole(currentUser.role === "organizer" ? "visitor" : "organizer");
-                    }}
-                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition-colors cursor-pointer"
-                  >
-                    <Users size={15} className="text-slate-400" />
-                    <span>Switch to {currentUser.role === "organizer" ? "Visitor Mode" : "Organizer Mode"}</span>
-                  </button>
-
-                  <div className="h-px bg-slate-100 my-1" />
-
-                  {/* Sign Out */}
-                  <button
-                    onClick={() => {
-                      setProfileOpen(false);
-                      onSignOut();
-                    }}
-                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-2.5 transition-colors cursor-pointer"
-                  >
-                    <LogOut size={15} />
-                    <span>Sign Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => onOpenAuth("signin")}
-                className="px-3.5 py-2 text-xs font-bold text-slate-700 hover:text-blue-600 rounded-xl transition-colors cursor-pointer"
-              >
-                Sign In
-              </button>
-
-              <button
-                onClick={() => onOpenAuth("signup")}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/20 transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                <Plus size={14} />
-                <span>Create Account</span>
-              </button>
-            </div>
-          )}
-        </div>
-      </header>
+      <UniversalTopBar
+        currentUser={currentUser}
+        registrations={registrations}
+        onGoToHome={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        onOpenAuth={onOpenAuth}
+        onOpenProfile={onOpenProfile}
+        onOpenPassesModal={onOpenVisitorPasses}
+        onOpenCreationWizard={onOpenCreationWizard}
+        onOpenEventsHub={onOpenEventsHub}
+        onSignOut={onSignOut}
+      />
 
       {/* ==================================================================== */}
       {/* 2. ROLLING HERO SECTION (CINEMATIC DARK OVERLAY CAROUSEL)            */}
       {/* ==================================================================== */}
       <section 
         id="featured"
-        className="relative overflow-hidden bg-slate-950 text-white border-b border-slate-800 min-h-[480px] sm:min-h-[520px] flex items-center"
+        className="relative overflow-hidden bg-slate-950 text-white border-b border-slate-800 h-[520px] sm:h-[560px] flex items-center justify-center"
         onMouseEnter={() => setIsAutoPlay(false)}
         onMouseLeave={() => setIsAutoPlay(true)}
       >
-        {/* Background Image Accent with Dark Overlay */}
-        <div className="absolute inset-0 z-0">
-          <img 
-            src={activeSlide.banner || "https://images.unsplash.com/photo-1511578314322-379afb476865?auto=format&fit=crop&w=1600&q=80"} 
-            alt={activeSlide.title || "Event Banner"} 
-            className="w-full h-full object-cover opacity-35 filter blur-xs scale-105 transition-all duration-1000"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/85 to-slate-900/80" />
-        </div>
-
-        {/* Ambient Subtle Blue Glow Accent */}
-        <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-blue-600/20 rounded-full blur-3xl pointer-events-none" />
-
-        {/* Hero Content Container */}
-        <div className="relative z-10 max-w-7xl w-full mx-auto px-6 sm:px-8 py-12 flex flex-col md:flex-row items-center justify-between gap-10">
-          {/* Left Slide Details */}
-          <div className="max-w-2xl space-y-5 text-left">
-            {/* Badges */}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="px-3 py-1 rounded-full bg-blue-600/20 text-blue-400 border border-blue-500/30 text-xs font-extrabold uppercase tracking-wider flex items-center gap-1.5 shadow-xs backdrop-blur-md">
-                <Sparkles size={12} className="text-blue-400" />
-                <span>Featured Summit</span>
-              </span>
-
-              <span className="px-2.5 py-1 rounded-full bg-slate-900/80 border border-slate-800 text-slate-200 text-xs font-bold uppercase tracking-wider shadow-xs">
-                {activeSlide.type || "Hybrid"}
-              </span>
-
-              <span className="px-2.5 py-1 rounded-full bg-slate-900/60 border border-slate-800 text-slate-300 text-xs font-semibold">
-                {activeSlide.category || "Technology & Software"}
-              </span>
-            </div>
-
-            {/* Title & Tagline */}
-            <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-tight">
-              {activeSlide.title}
-            </h1>
-
-            <p className="text-slate-300 text-sm sm:text-base font-normal leading-relaxed max-w-xl">
-              {activeSlide.tagline || activeSlide.description}
-            </p>
-
-            {/* Meta: Dates & Location */}
-            <div className="flex flex-wrap items-center gap-4 text-xs sm:text-sm text-slate-200 font-medium pt-1">
-              <div className="flex items-center gap-2 bg-slate-900/80 backdrop-blur-md px-3.5 py-2 rounded-xl border border-slate-800 shadow-sm">
-                <Calendar size={15} className="text-blue-400 shrink-0" />
-                <span>{activeSlide.startDate} — {activeSlide.endDate}</span>
+        {heroEvents.length === 0 ? (
+          <div className="relative z-10 max-w-7xl w-full mx-auto px-6 sm:px-8 py-16 flex flex-col md:flex-row items-center justify-between gap-10">
+            <div className="max-w-4xl space-y-5 text-left">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-3 py-1 rounded-full bg-blue-600/20 text-blue-400 border border-blue-500/30 text-xs font-extrabold uppercase tracking-wider flex items-center gap-1.5 shadow-xs backdrop-blur-md">
+                  <Sparkles size={12} className="text-blue-400" />
+                  <span>{t("hero.nextGenExperience", "Next-Gen Event Experience")}</span>
+                </span>
+                <span className="px-2.5 py-1 rounded-full bg-slate-900/80 border border-slate-800 text-slate-300 text-xs font-bold uppercase tracking-wider shadow-xs">
+                  {t("hero.interactiveFloorPlans", "Interactive 2D Floor Plans")}
+                </span>
               </div>
 
-              <div className="flex items-center gap-2 bg-slate-900/80 backdrop-blur-md px-3.5 py-2 rounded-xl border border-slate-800 shadow-sm">
-                <MapPin size={15} className="text-blue-400 shrink-0" />
-                <span>{activeSlide.location}</span>
+              <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-tight">
+                {t("hero.platformTagline", "The Modern Platform for Conferences & Summits")}
+              </h1>
+
+              <p className="text-slate-300 text-sm sm:text-base font-normal leading-relaxed max-w-3xl">
+                {t("hero.platformDesc", "Host, discover, and navigate world-class professional events with real-time floor plans, instant digital QR passes, and streamlined session agendas.")}
+              </p>
+
+              <div className="pt-3 flex flex-wrap items-center gap-3">
+                <button
+                  onClick={onOpenCreationWizard}
+                  className="px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-bold text-sm shadow-xl shadow-blue-600/40 transition-all cursor-pointer"
+                >
+                  {t("hero.hostEvent", "Host an Event")}
+                </button>
+                <button
+                  onClick={onSwitchToOrganizer}
+                  className="px-6 py-4 bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-2xl font-bold text-sm transition-all cursor-pointer"
+                >
+                  {t("hero.organizerHub", "Organizer Hub")}
+                </button>
               </div>
             </div>
 
-            {/* CTA */}
-            <div className="pt-3">
-              <button
-                onClick={() => onViewLivePage(activeSlide.id)}
-                className="px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-bold text-sm shadow-xl shadow-blue-600/40 transition-all flex items-center gap-2 cursor-pointer group"
-              >
-                <span>View Event</span>
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          </div>
-
-          {/* Right Hero Event Showcase Card */}
-          <div className="hidden lg:block w-96 shrink-0 animate-fade-in">
-            <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
-              <div className="h-48 w-full relative overflow-hidden bg-slate-950">
-                <img 
-                  src={activeSlide.banner} 
-                  alt={activeSlide.title} 
-                  className="w-full h-full object-cover" 
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent" />
-                <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-xs">
-                  <span className="px-2.5 py-1 rounded-full bg-blue-600 text-white font-extrabold text-[10px] uppercase shadow-xs">
-                    {activeSlide.status || "Live Summit"}
-                  </span>
-                  <span className="text-white font-bold text-xs backdrop-blur-md bg-black/60 px-2 py-0.5 rounded-lg border border-white/10">
-                    {activeSlide.attendeeCount || 1200}+ Attendees
-                  </span>
+            <div className="hidden lg:block w-96 shrink-0">
+              <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4 text-left">
+                <div className="w-12 h-12 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                  <Calendar size={24} />
                 </div>
-              </div>
-
-              <div className="p-5 space-y-3 text-left">
-                <h4 className="text-sm font-bold text-white line-clamp-1">{activeSlide.title}</h4>
-                <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed font-normal">{activeSlide.description}</p>
-                <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400 font-medium">
-                  <span>Capacity: {activeSlide.capacity || 1500}</span>
-                  <span className="text-blue-400 font-bold">18 Sessions</span>
+                <div>
+                  <h4 className="text-sm font-bold text-white">{t("hero.zeroActiveEvents", "Zero Active Events")}</h4>
+                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                    {t("hero.zeroActiveEventsDesc", "Create your first summit to publish interactive schedules, exhibitor booths, and attendee badges.")}
+                  </p>
+                </div>
+                <div className="pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+                  <span>{t("hero.fastSetup", "Fast Setup")}</span>
+                  <span className="text-emerald-400 font-bold">{t("hero.readyInMinutes", "Ready in Minutes")}</span>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Carousel Slide Navigation Controls */}
-        <div className="absolute bottom-4 left-0 right-0 z-20 flex items-center justify-between max-w-7xl mx-auto px-6 sm:px-8">
-          {/* Slide Indicator Dots */}
-          <div className="flex items-center gap-2">
-            {heroEvents.map((_, idx) => (
-              <button
-                key={idx}
-                onClick={() => setCurrentSlideIndex(idx)}
-                className={`h-2 rounded-full transition-all cursor-pointer ${
-                  currentSlideIndex === idx 
-                    ? "w-8 bg-blue-500 shadow-sm shadow-blue-500/50" 
-                    : "w-2 bg-slate-700 hover:bg-slate-600"
-                }`}
-                title={`Slide ${idx + 1}`}
+        ) : (
+          <>
+            {/* Background Image Accent with Subtle Overlay */}
+            <div className="absolute inset-0 z-0 overflow-hidden">
+              <img 
+                src={activeSlide.banner || "https://images.unsplash.com/photo-1511578314322-379afb476865?auto=format&fit=crop&w=1600&q=80"} 
+                alt={activeSlide.title || "Event Banner"} 
+                className="w-full h-full object-cover opacity-80 scale-105 transition-all duration-1000"
               />
-            ))}
-          </div>
+              {/* Directional gradient to ensure text readability on the left while keeping the photo clearly visible */}
+              <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/50 to-slate-950/30" />
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-slate-950/30" />
+            </div>
 
-          {/* Prev / Next Arrows */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setCurrentSlideIndex(prev => (prev - 1 + heroEvents.length) % heroEvents.length)}
-              className="w-9 h-9 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 flex items-center justify-center transition-all cursor-pointer shadow-sm"
-            >
-              <ChevronLeft size={16} />
-            </button>
-            <button
-              onClick={() => setCurrentSlideIndex(prev => (prev + 1) % heroEvents.length)}
-              className="w-9 h-9 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 flex items-center justify-center transition-all cursor-pointer shadow-sm"
-            >
-              <ChevronRight size={16} />
-            </button>
-          </div>
-        </div>
+            {/* Ambient Subtle Blue Glow Accent */}
+            <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-blue-600/20 rounded-full blur-3xl pointer-events-none" />
+
+            {/* Hero Content Container */}
+            <div className="relative z-10 max-w-7xl w-full mx-auto px-6 sm:px-8 py-16 sm:py-20 flex flex-col items-start justify-center">
+              {/* Slide Details */}
+              <div className="max-w-5xl w-full space-y-6 text-left animate-fade-in">
+
+
+                {/* Title & Tagline */}
+                <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-tight">
+                  {activeSlide.title}
+                </h1>
+
+                <p className="text-slate-300 text-base sm:text-lg font-normal leading-relaxed max-w-4xl">
+                  {activeSlide.tagline || activeSlide.description}
+                </p>
+
+                {/* Meta: Dates & Location */}
+                <div className="flex flex-wrap items-center gap-4 text-xs sm:text-sm text-slate-200 font-medium pt-1">
+                  {activeSlide.startDate && (
+                    <div className="flex items-center gap-2 bg-slate-900/80 backdrop-blur-md px-4 py-2.5 rounded-xl border border-slate-800 shadow-sm">
+                      <Calendar size={16} className="text-blue-400 shrink-0" />
+                      <span>{activeSlide.startDate} {activeSlide.endDate ? `— ${activeSlide.endDate}` : ""}</span>
+                    </div>
+                  )}
+
+                  {activeSlide.location && (
+                    <div className="flex items-center gap-2 bg-slate-900/80 backdrop-blur-md px-4 py-2.5 rounded-xl border border-slate-800 shadow-sm">
+                      <MapPin size={16} className="text-blue-400 shrink-0" />
+                      <span>{activeSlide.location}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* CTA */}
+                <div className="pt-2">
+                  <button
+                    onClick={() => onViewLivePage(activeSlide.id)}
+                    className="px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-bold text-sm shadow-xl shadow-blue-600/40 transition-all cursor-pointer"
+                  >
+                    {t("hero.viewEvent", "View Event")}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Carousel Slide Indicator Dots (Centered) */}
+            {heroEvents.length > 1 && (
+              <div className="absolute bottom-6 left-0 right-0 z-20 flex items-center justify-center gap-2">
+                {heroEvents.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setCurrentSlideIndex(idx)}
+                    className={`h-2 rounded-full transition-all cursor-pointer ${
+                      currentSlideIndex === idx 
+                        ? "w-8 bg-blue-500 shadow-sm shadow-blue-500/50" 
+                        : "w-2.5 bg-slate-700 hover:bg-slate-500"
+                    }`}
+                    title={`Slide ${idx + 1}`}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </section>
 
       {/* ==================================================================== */}
@@ -484,10 +327,10 @@ export default function MainHomePage({
           <div>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-100 text-blue-700 text-xs font-bold mb-2">
               <Compass size={13} />
-              <span>Explore All Gatherings</span>
+              <span>{t("home.exploreAll", "Explore All Gatherings")}</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              Upcoming Conferences & Expos
+              {t("home.upcomingConferences", "Upcoming Conferences & Expos")}
             </h2>
             <p className="text-xs sm:text-sm text-slate-500 font-normal mt-1">
               Browse premier summits, claim attendee passes, and preview floor plans.
@@ -499,7 +342,7 @@ export default function MainHomePage({
             <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search by topic, city, or event..."
+              placeholder={t("home.searchPlaceholder", "Search summits, expos, keywords, or cities...")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs font-semibold text-slate-900 placeholder-slate-400 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all shadow-xs"
@@ -630,10 +473,9 @@ export default function MainHomePage({
                   <div className="p-6 pt-0">
                     <button
                       onClick={() => onViewLivePage(ev.id)}
-                      className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-blue-600/20 hover:shadow-lg hover:shadow-blue-600/30 transition-all cursor-pointer group"
+                      className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-bold flex items-center justify-center shadow-md shadow-blue-600/20 hover:shadow-lg hover:shadow-blue-600/30 transition-all cursor-pointer"
                     >
-                      <span>View Event</span>
-                      <ChevronRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+                      View Event
                     </button>
                   </div>
                 </div>
@@ -758,8 +600,8 @@ export default function MainHomePage({
             <div className="space-y-3">
               <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">For Attendees</h4>
               <ul className="space-y-2 text-slate-500 font-medium">
-                <li><button onClick={() => setShowPassesModal(true)} className="hover:text-blue-600 transition-colors text-left cursor-pointer">My Digital Passes</button></li>
-                <li><button onClick={() => setShowPassesModal(true)} className="hover:text-blue-600 transition-colors text-left cursor-pointer">QR Code Badge Download</button></li>
+                <li><button onClick={() => onOpenVisitorPasses && onOpenVisitorPasses()} className="hover:text-blue-600 transition-colors text-left cursor-pointer">{t("nav.myTickets", "My Tickets")}</button></li>
+                <li><button onClick={() => onOpenVisitorPasses && onOpenVisitorPasses()} className="hover:text-blue-600 transition-colors text-left cursor-pointer">{t("passes.downloadQR", "QR Code Passes")}</button></li>
                 <li><a href="#explore" className="hover:text-blue-600 transition-colors">Claim Free Admission</a></li>
                 <li><a href="#explore" className="hover:text-blue-600 transition-colors">VIP Networking Lounges</a></li>
                 <li><a href="#explore" className="hover:text-blue-600 transition-colors">Venue Directions &amp; Transit</a></li>
@@ -784,10 +626,9 @@ export default function MainHomePage({
 
             <button
               onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-              className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 transition-all flex items-center gap-1.5 font-bold cursor-pointer shadow-xs"
+              className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 transition-all font-bold cursor-pointer shadow-xs"
             >
-              <span>Back to Top</span>
-              <ArrowUp size={14} />
+              Back to Top
             </button>
           </div>
         </div>
@@ -819,11 +660,11 @@ export default function MainHomePage({
                   <button
                     onClick={() => {
                       setRsvpEvent(null);
-                      setShowPassesModal(true);
+                      if (onOpenVisitorPasses) onOpenVisitorPasses();
                     }}
                     className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md shadow-blue-600/20"
                   >
-                    View in My Passes
+                    View in My Tickets
                   </button>
                 </div>
               </div>
@@ -836,9 +677,9 @@ export default function MainHomePage({
                   </div>
                   <button 
                     onClick={() => setRsvpEvent(null)}
-                    className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
+                    className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 font-bold cursor-pointer"
                   >
-                    <X size={16} />
+                    ✕
                   </button>
                 </div>
 
@@ -893,78 +734,17 @@ export default function MainHomePage({
                   <button
                     type="submit"
                     disabled={rsvpLoading}
-                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/20 transition-all flex items-center justify-center cursor-pointer disabled:opacity-50 mt-2"
                   >
                     {rsvpLoading ? (
                       <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                     ) : (
-                      <>
-                        <span>Generate Digital Pass</span>
-                        <Sparkles size={14} />
-                      </>
+                      "Generate Digital Pass"
                     )}
                   </button>
                 </form>
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* ==================================================================== */}
-      {/* 6. MY PASSES MODAL (LIGHT MODE)                                      */}
-      {/* ==================================================================== */}
-      {showPassesModal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fade-in font-sans">
-          <div className="bg-white border border-slate-200 w-full max-w-3xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] text-slate-900">
-            <div className="p-6 border-b border-slate-150 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <Ticket size={20} className="text-blue-600" />
-                <h3 className="text-lg font-bold text-slate-900">My Digital Tickets & QR Passes</h3>
-              </div>
-              <button 
-                onClick={() => setShowPassesModal(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="p-6 overflow-y-auto space-y-4">
-              {registrations.length === 0 ? (
-                <div className="py-12 text-center space-y-3">
-                  <Ticket size={32} className="text-slate-400 mx-auto" />
-                  <p className="text-xs text-slate-500">You haven&apos;t claimed any tickets yet.</p>
-                  <button 
-                    onClick={() => setShowPassesModal(false)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold"
-                  >
-                    Explore Summits
-                  </button>
-                </div>
-              ) : (
-                registrations.map(reg => (
-                  <div key={reg.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div className="space-y-1 text-left flex-1">
-                      <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
-                        {reg.ticketType}
-                      </span>
-                      <h4 className="text-sm font-bold text-slate-900">{reg.eventTitle}</h4>
-                      <p className="text-xs text-slate-500">{reg.startDate} — {reg.location}</p>
-                      <span className="text-[11px] font-mono text-blue-600 font-bold block pt-1">{reg.badgeCode}</span>
-                    </div>
-
-                    <div className="w-28 h-28 bg-white p-2 border border-slate-200 rounded-xl shrink-0 flex items-center justify-center shadow-xs">
-                      {qrCodeUrls[reg.id] ? (
-                        <img src={qrCodeUrls[reg.id]} alt="QR" className="w-full h-full object-contain" />
-                      ) : (
-                        <QRCode value={reg.badgeCode} className="w-full h-full" />
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
           </div>
         </div>
       )}

@@ -3638,11 +3638,7 @@ export default function FloorPlanModifier({
   };
 
   return (
-    <div className={`flex flex-col flex-1 bg-slate-50 select-none ${
-      initialPreviewMode 
-        ? "h-[100dvh] w-full border-none rounded-none shadow-none overflow-hidden" 
-        : "h-[calc(100dvh-32px)] border border-slate-200 rounded-3xl shadow-sm overflow-hidden"
-    }`}>
+    <div className="flex flex-col flex-1 bg-slate-50 select-none h-screen w-full border-none rounded-none shadow-none overflow-hidden min-h-0">
       <header className={`border-b border-slate-205/60 flex shrink-0 transition-all ${
         isPreviewMode && previewDeviceMode === "mobile" && !isDesktopViewport
           ? "fixed top-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md flex-col justify-center px-5 pt-5 pb-3 h-auto gap-3 items-stretch shadow-sm"
@@ -3925,7 +3921,7 @@ export default function FloorPlanModifier({
 
       {/* Main split work area */}
       <div 
-        className={`flex flex-1 w-full overflow-hidden ${
+        className={`flex flex-1 w-full min-h-0 h-[calc(100vh-64px)] max-h-[calc(100vh-64px)] overflow-hidden ${
           isPreviewMode && previewDeviceMode === "mobile" && !isDesktopViewport
             ? (floors.length > 1 ? "pt-[110px]" : "pt-[68px]")
             : ""
@@ -3939,7 +3935,7 @@ export default function FloorPlanModifier({
               animate={{ width: 340, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ type: "spring", damping: 26, stiffness: 170 }}
-              className="border-r border-slate-200 bg-white px-4 pb-6 flex flex-col gap-6 overflow-y-auto shrink-0 select-none relative overflow-hidden"
+              className="border-r border-slate-200 bg-white px-4 pb-6 flex flex-col gap-6 overflow-y-auto shrink-0 select-none relative overflow-hidden h-full max-h-full min-h-0"
             >
               <div className="min-w-[308px] flex flex-col gap-6 pt-6">
                 <div className="flex flex-col gap-1">
@@ -4045,7 +4041,7 @@ export default function FloorPlanModifier({
         </AnimatePresence>
 
         {/* Center: HTML5 Canvas Area */}
-        <main className={`flex-1 h-full flex items-center justify-center overflow-hidden relative ${
+        <main className={`flex-1 h-full min-h-0 flex items-center justify-center overflow-hidden relative ${
           initialPreviewMode ? "p-0" : "p-0 md:p-6"
         }`}>
 
@@ -4054,7 +4050,7 @@ export default function FloorPlanModifier({
             className={`transition-all duration-300 relative overflow-hidden flex flex-col pointer-events-auto shrink-0 ${
               isPreviewMode && previewDeviceMode === "mobile"
                 ? "w-full h-full xl:w-[375px] xl:h-[720px] xl:rounded-[50px] xl:border-[12px] xl:border-slate-900 shadow-none xl:shadow-2xl bg-slate-50 xl:ring-1 xl:ring-slate-950/10 animate-fade-in"
-                : "w-full h-full flex-1"
+                : "w-full h-full min-h-0 flex-1"
             }`}
           >
             {/* Dynamic Status Bar (iPhone style) - Rendered only in Mobile preview mode */}
@@ -4081,7 +4077,7 @@ export default function FloorPlanModifier({
             )}
 
             {/* Canvas viewport container */}
-            <div className="flex-1 relative overflow-hidden flex flex-col w-full h-full">
+            <div className="flex-1 min-h-0 relative overflow-hidden flex flex-col w-full h-full">
               {/* Floating Floor Switcher Panel (Edit Mode Only) */}
               {!isPreviewMode && (
                 <div className="absolute z-30 transition-all duration-300 pointer-events-auto left-4 top-4">
@@ -4779,7 +4775,7 @@ export default function FloorPlanModifier({
               animate={{ width: 340, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ type: "spring", damping: 26, stiffness: 170 }}
-              className="border-l border-slate-200 bg-white p-6 flex flex-col gap-6 overflow-y-auto shrink-0 select-none overflow-hidden"
+              className="border-l border-slate-200 bg-white p-6 flex flex-col gap-6 overflow-y-auto shrink-0 select-none overflow-hidden h-full max-h-full min-h-0"
             >
               <div className="min-w-[292px] flex flex-col gap-6">
                 <div className="flex flex-col gap-1">
@@ -7278,7 +7274,7 @@ export default function FloorPlanModifier({
                   className="w-full flex items-center justify-center gap-2 bg-rose-50 border border-rose-100 hover:bg-rose-500 hover:border-rose-500 text-rose-550 hover:text-white py-3 px-4 rounded-xl font-semibold text-xs transition-all duration-200 cursor-pointer shadow-sm disabled:opacity-40 disabled:pointer-events-none"
                 >
                   <Trash2 size={14} />
-                  Delete Element
+                  Remove Element
                 </button>
               </div>
             </div>
@@ -7448,7 +7444,7 @@ export default function FloorPlanModifier({
                   className="w-full flex items-center justify-center gap-2 bg-rose-50 border border-rose-100 hover:bg-rose-500 hover:border-rose-500 text-rose-550 hover:text-white py-3 px-4 rounded-xl font-semibold text-xs cursor-pointer shadow-sm transition-all duration-200"
                 >
                   <Trash2 size={14} />
-                  Delete Selected
+                  Remove Selected
                 </button>
               </div>
             </div>

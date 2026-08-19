@@ -5358,7 +5358,7 @@ const FloorPlanCanvas = React.forwardRef(({
     <div 
       ref={containerRef}
       style={{ touchAction: "none" }}
-      className={`floor-plan-workspace flex-1 h-full bg-slate-100 outline-none relative overflow-hidden flex items-center justify-center ${
+      className={`floor-plan-workspace flex-1 h-full min-h-0 bg-slate-100 outline-none relative overflow-hidden flex items-center justify-center ${
         isPreviewMode ? "border-none rounded-none" : "border border-slate-200 rounded-3xl"
       }`}
       onDrop={handleDrop}

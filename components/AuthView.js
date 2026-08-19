@@ -5,9 +5,10 @@ import React, { useState } from "react";
 import { 
   Building2, Ticket, Sparkles, ArrowRight, 
   CheckCircle2, Lock, Mail, User, ShieldCheck, 
-  KeyRound, AlertCircle, ArrowLeft, Zap, Eye, EyeOff
+  KeyRound, AlertCircle, ArrowLeft, Zap, Eye, EyeOff, Globe, ChevronDown, Check
 } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import { useLanguage } from "../lib/i18n";
 
 export default function AuthView({ 
   onAuthSuccess, 
@@ -15,6 +16,8 @@ export default function AuthView({
   onGoToHome,
   initialMode = "signin" 
 }) {
+  const { t, lang, setLang, isRTL, languages } = useLanguage();
+  const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [authMode, setAuthMode] = useState(initialMode); // "signin" | "signup" | "forgot-password" | "check-email"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -62,7 +65,7 @@ export default function AuthView({
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: typeof window !== "undefined" ? window.location.origin : undefined,
+          redirectTo: typeof window !== "undefined" ? `${window.location.origin}/?view=events-hub` : undefined,
         },
       });
       if (error) throw error;
@@ -301,6 +304,51 @@ export default function AuthView({
         </button>
       </div>
 
+      {/* Top Right Language Selector */}
+      <div className="absolute top-6 right-6 sm:top-8 sm:right-8 z-20">
+        <div className="relative">
+          {(() => {
+            const curLang = languages.find(l => l.code === lang) || languages[0];
+            return (
+              <button
+                onClick={() => setLangMenuOpen(o => !o)}
+                className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all cursor-pointer shadow-xs"
+                title="Change Language"
+              >
+                <img src={curLang?.icon || "https://i.imgur.com/NXtMImD.png"} alt={lang} className="w-5 h-5 object-contain shrink-0" />
+                <span className="uppercase tracking-wide font-extrabold text-[11px]">{lang}</span>
+                <ChevronDown size={11} className={`text-slate-400 transition-transform ${langMenuOpen ? "rotate-180" : ""}`} />
+              </button>
+            );
+          })()}
+
+          {langMenuOpen && (
+            <div className="absolute top-full right-0 mt-1.5 w-36 bg-white border border-slate-200 rounded-xl shadow-xl p-1 z-50 animate-scale-up space-y-0.5">
+              {languages.map(item => (
+                <button
+                  key={item.code}
+                  onClick={() => {
+                    setLang(item.code);
+                    setLangMenuOpen(false);
+                  }}
+                  className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                    lang === item.code 
+                      ? "bg-blue-50 text-blue-600 font-bold" 
+                      : "text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <img src={item.icon} alt={item.code} className="w-5 h-5 object-contain shrink-0" />
+                    <span>{item.label}</span>
+                  </div>
+                  {lang === item.code && <Check size={12} className="text-blue-600 shrink-0" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Main Authentication Card (Light Mode & Clean, Centered Horizontally) */}
       <div className="relative z-10 w-full max-w-[440px] bg-white/95 backdrop-blur-xl border border-slate-200/90 rounded-3xl p-7 sm:p-9 shadow-2xl shadow-slate-300/40 my-auto">
         {authMode === "check-email" ? (
@@ -347,10 +395,9 @@ export default function AuthView({
             <div>
               <button 
                 onClick={() => { setAuthMode("signin"); setErrorMsg(""); setSuccessMsg(""); }} 
-                className="inline-flex items-center gap-1.5 text-slate-400 hover:text-slate-800 text-xs font-semibold mb-3 cursor-pointer"
+                className="inline-flex items-center text-slate-400 hover:text-slate-800 text-xs font-semibold mb-3 cursor-pointer"
               >
-                <ArrowLeft size={14} />
-                <span>Back to Sign In</span>
+                Back to Sign In
               </button>
               <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Reset password</h2>
               <p className="text-slate-500 text-xs mt-1">
@@ -413,7 +460,7 @@ export default function AuthView({
                     : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                Sign In
+                {t("auth.signInButton", "Sign In")}
               </button>
 
               <button
@@ -425,18 +472,18 @@ export default function AuthView({
                     : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                Create Account
+                {t("auth.signUpButton", "Create Account")}
               </button>
             </div>
 
             <div>
               <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                {authMode === "signin" ? "Welcome back" : "Create your account"}
+                {authMode === "signin" ? t("auth.welcomeBack", "Welcome back") : t("auth.createAccount", "Create your account")}
               </h2>
               <p className="text-slate-500 text-xs mt-1">
                 {authMode === "signin" 
-                  ? "Enter your credentials to access your account." 
-                  : "Join Eventzone to host or explore world-class summits."}
+                  ? t("auth.signInDesc", "Sign in to access your conferences, floor plans and tickets.")
+                  : t("auth.signUpDesc", "Join the premier platform for summits, expos and digital badges.")}
               </p>
             </div>
 
@@ -478,32 +525,30 @@ export default function AuthView({
                   {/* Role Selector */}
                   <div>
                     <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                      Account Type
+                      {t("auth.iAmOrganizer", "Account Type")}
                     </label>
                     <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl">
                       <button
                         type="button"
                         onClick={() => setSelectedRole("organizer")}
-                        className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center cursor-pointer ${
                           selectedRole === "organizer"
                             ? "bg-white text-blue-600 shadow-xs"
                             : "text-slate-500 hover:text-slate-800"
                         }`}
                       >
-                        <Building2 size={13} />
-                        <span>Organizer</span>
+                        {t("nav.roleOrganizer", "Organizer")}
                       </button>
                       <button
                         type="button"
                         onClick={() => setSelectedRole("attendee")}
-                        className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center cursor-pointer ${
                           selectedRole === "attendee"
                             ? "bg-white text-emerald-600 shadow-xs"
                             : "text-slate-500 hover:text-slate-800"
                         }`}
                       >
-                        <Ticket size={13} />
-                        <span>Visitor</span>
+                        {t("nav.roleVisitor", "Visitor")}
                       </button>
                     </div>
                   </div>
@@ -511,7 +556,7 @@ export default function AuthView({
                   {/* Full Name */}
                   <div>
                     <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                      Full Name
+                      {t("auth.fullName", "Full Name")}
                     </label>
                     <div className="relative">
                       <User size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -531,7 +576,7 @@ export default function AuthView({
               {/* Email Address */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                  Email Address
+                  {t("auth.email", "Email Address")}
                 </label>
                 <div className="relative">
                   <Mail size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -550,7 +595,7 @@ export default function AuthView({
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                    Password
+                    {t("auth.password", "Password")}
                   </label>
                   {authMode === "signin" && (
                     <button
@@ -558,7 +603,7 @@ export default function AuthView({
                       onClick={() => { setAuthMode("forgot-password"); setErrorMsg(""); }}
                       className="text-[11px] text-blue-600 hover:underline font-semibold cursor-pointer"
                     >
-                      Forgot?
+                      {t("auth.forgotPassword", "Forgot?")}
                     </button>
                   )}
                 </div>
@@ -586,7 +631,7 @@ export default function AuthView({
               {authMode === "signup" && (
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                    Confirm Password
+                    {t("auth.confirmPassword", "Confirm Password")}
                   </label>
                   <div className="relative">
                     <KeyRound size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -608,8 +653,8 @@ export default function AuthView({
                 className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer disabled:opacity-50 mt-1"
               >
                 {loading 
-                  ? "Please wait..." 
-                  : (authMode === "signin" ? "Sign In" : "Create Account")}
+                  ? t("common.loading", "Please wait...") 
+                  : (authMode === "signin" ? t("auth.signInButton", "Sign In") : t("auth.signUpButton", "Create Account"))}
               </button>
             </form>
           </div>

@@ -8,6 +8,7 @@ import {
   AlertCircle, X, Upload, Globe, Mail
 } from "lucide-react";
 import { uploadProfileAvatar } from "../lib/db";
+import UniversalTopBar from "./UniversalTopBar";
 
 // Curated list of popular summit networking & matchmaking interests
 const CURATED_INTERESTS = [
@@ -679,69 +680,42 @@ export default function ProfileView({
       />
 
       {/* ==================================================================== */}
-      {/* 1. TOP HEADER / BREADCRUMB NAVIGATION                                 */}
+      {/* 1. UNIVERSAL TOP BAR NAVIGATION                                       */}
       {/* ==================================================================== */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 px-6 sm:px-12 py-3.5 flex items-center justify-between shadow-xs">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={onGoToHome}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
-          >
-            <ArrowLeft size={14} />
-            <span>Back to Home</span>
-          </button>
-
-          <div className="h-4 w-px bg-slate-200 hidden sm:block" />
-
-          <div 
-            onClick={onGoToHome}
-            className="flex items-center cursor-pointer select-none group"
-            title="Eventzone Home"
-          >
-            <img 
-              src="https://i.imgur.com/jFDrQbM.png" 
-              alt="eventzone" 
-              className="h-6 w-auto object-contain transition-transform group-hover:scale-105" 
-            />
+      <UniversalTopBar
+        currentUser={currentUser}
+        registrations={registrations}
+        onGoToHome={onGoToHome}
+        onOpenAuth={onOpenAuth}
+        onOpenProfile={() => {}}
+        onOpenPassesModal={onGoToHome}
+        onOpenCreationWizard={onGoToHome}
+        onOpenEventsHub={onGoToHome}
+        onSignOut={onSignOut}
+        rightExtra={
+          <div className="flex items-center gap-2 mr-1">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-blue-600/20 hover:shadow transition-all cursor-pointer disabled:opacity-50"
+            >
+              {saving ? (
+                <>
+                  <Loader2 size={13} className="animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : saveSuccess ? (
+                <>
+                  <Check size={13} />
+                  <span>Saved!</span>
+                </>
+              ) : (
+                <span>Save Profile</span>
+              )}
+            </button>
           </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {/* Cloud Sync Status Pill */}
-          <div className="hidden md:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-[11px] font-medium">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span>Real-Time Mobile Sync</span>
-          </div>
-
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-blue-600/20 hover:shadow transition-all cursor-pointer disabled:opacity-50"
-          >
-            {saving ? (
-              <>
-                <Loader2 size={13} className="animate-spin" />
-                <span>Saving...</span>
-              </>
-            ) : saveSuccess ? (
-              <>
-                <Check size={13} />
-                <span>Saved!</span>
-              </>
-            ) : (
-              <span>Save Profile</span>
-            )}
-          </button>
-
-          <button
-            onClick={onSignOut}
-            className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-            title="Sign Out"
-          >
-            <LogOut size={16} />
-          </button>
-        </div>
-      </header>
+        }
+      />
 
       {/* ==================================================================== */}
       {/* 2. MAIN PROFILE CONTAINER                                            */}

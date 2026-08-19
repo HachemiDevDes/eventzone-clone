@@ -1,10 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Plus, Calendar, Clock, Edit2, Trash2, Image as ImageIcon, User } from "lucide-react";
+import { Calendar, Archive, RotateCcw } from "lucide-react";
+import CustomDatePicker from "./CustomDatePicker";
+import CustomTimePicker from "./CustomTimePicker";
+import { generateUuid } from "../lib/db";
 
 export default function CalendarView({
-  sessions,
+  sessions = [],
   attendees = [],
   onSaveSessions,
   onClearAllSessions,
@@ -36,12 +39,12 @@ export default function CalendarView({
   const [logosList, setLogosList] = useState([]);
 
   // Sidebar Resizing state
-  const [sidebarWidth, setSidebarWidth] = useState(450);
+  const [sidebarWidth, setSidebarWidth] = useState(420);
   const isResizing = useRef(false);
 
   // Initialize sidebar width from local storage
   useEffect(() => {
-    const savedWidth = localStorage.getItem("sidebar_width");
+    const savedWidth = localStorage.getItem("calendar_sidebar_width");
     if (savedWidth) {
       setSidebarWidth(parseInt(savedWidth));
     }
@@ -57,10 +60,10 @@ export default function CalendarView({
   useEffect(() => {
     const handleMouseMove = (e) => {
       if (!isResizing.current) return;
-      const newWidth = e.clientX - 260; // offset the Eventzone nav-sidebar (260px)
-      if (newWidth > 320 && newWidth < 800) {
+      const newWidth = e.clientX - 320; // offset the main navigation sidebar (320px)
+      if (newWidth > 320 && newWidth < 700) {
         setSidebarWidth(newWidth);
-        localStorage.setItem("sidebar_width", newWidth);
+        localStorage.setItem("calendar_sidebar_width", newWidth);
       }
     };
 
@@ -105,7 +108,7 @@ export default function CalendarView({
       }
     } catch (err) {
       console.error("Failed to upload image:", err);
-      alert("Failed to upload image to Supabase Storage");
+      alert("Failed to upload image");
     }
   };
 
@@ -116,7 +119,7 @@ export default function CalendarView({
       const newSpeaker = {
         id: Date.now(),
         name: speakerName,
-        image: speakerImg || `https://ui-avatars.com/api/?name=${encodeURIComponent(speakerName)}&background=random`
+        image: speakerImg || `https://ui-avatars.com/api/?name=${encodeURIComponent(speakerName)}&background=2563eb&color=fff`
       };
       setSpeakersList([...speakersList, newSpeaker]);
       setSpeakerName("");
@@ -126,7 +129,7 @@ export default function CalendarView({
       const newModerator = {
         id: Date.now(),
         name: moderatorName,
-        image: moderatorImg || `https://ui-avatars.com/api/?name=${encodeURIComponent(moderatorName)}&background=random`
+        image: moderatorImg || `https://ui-avatars.com/api/?name=${encodeURIComponent(moderatorName)}&background=4f46e5&color=fff`
       };
       setModeratorsList([...moderatorsList, newModerator]);
       setModeratorName("");
@@ -142,44 +145,45 @@ export default function CalendarView({
     }
   };
 
+  // Add logo to list
   const addLogo = () => {
-    if (!logoImg) {
-      alert("Please upload a logo image first.");
-      return;
-    }
+    if (!logoImg) return;
     const newLogo = {
       id: Date.now(),
-      label: logoLabel.trim() || "Sponsor",
-      image: logoImg
+      image: logoImg,
+      label: logoLabel.trim() || "Partner"
     };
     setLogosList([...logosList, newLogo]);
     setLogoImg("");
+    setLogoLabel("");
   };
 
   const removeLogo = (id) => {
     setLogosList(logosList.filter(l => l.id !== id));
   };
 
-
-  // Form submission: create or edit
+  // Form Submit
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    if (speakersList.length === 0) {
-      alert("Please add at least one speaker.");
+    if (!title.trim()) {
+      alert("Please enter a session title.");
+      return;
+    }
+    if (!date) {
+      alert("Please select a date for the session.");
       return;
     }
 
     if (editingSessionId) {
-      // Edit mode
-      const updated = sessions.map(s => {
+      const updatedSessions = sessions.map(s => {
         if (s.id === editingSessionId) {
           return {
             ...s,
-            title,
+            title: title.trim(),
             date,
-            startTime,
-            endTime,
+            startTime: startTime || "09:00",
+            endTime: endTime || "10:00",
             description,
             speakers: speakersList,
             moderators: moderatorsList,
@@ -188,16 +192,14 @@ export default function CalendarView({
         }
         return s;
       });
-      onSaveSessions(updated);
-      setEditingSessionId(null);
+      onSaveSessions(updatedSessions);
     } else {
-      // Create mode
       const newSession = {
-        id: Date.now(),
-        title,
+        id: generateUuid(),
+        title: title.trim(),
         date,
-        startTime,
-        endTime,
+        startTime: startTime || "09:00",
+        endTime: endTime || "10:00",
         description,
         speakers: speakersList,
         moderators: moderatorsList,
@@ -229,32 +231,42 @@ export default function CalendarView({
 
   const startEdit = (session) => {
     setEditingSessionId(session.id);
-    setTitle(session.title);
-    setDate(session.date);
-    setStartTime(session.startTime);
-    setEndTime(session.endTime);
-    setDescription(session.description);
+    setTitle(session.title || "");
+    setDate(session.date || "");
+    setStartTime(session.startTime || "");
+    setEndTime(session.endTime || "");
+    setDescription(session.description || "");
     setSpeakersList(session.speakers || []);
     setModeratorsList(session.moderators || []);
     setLogosList(session.logos || []);
   };
 
-  const handleDelete = (id) => {
-    if (confirm("Delete this session?")) {
-      onSaveSessions(sessions.filter(s => s.id !== id));
+  const handleArchive = (id) => {
+    if (confirm("Archive this session? (Preserved in archives)")) {
+      onSaveSessions(sessions.map(s => s.id === id ? { ...s, status: "archived", isArchived: true } : s));
       if (editingSessionId === id) resetForm();
     }
   };
 
-  // Timeline separation logic
-  const uniqueDates = [...new Set(sessions.map(s => s.date))].sort();
+  const handleRestore = (id) => {
+    onSaveSessions(sessions.map(s => s.id === id ? { ...s, status: "published", isArchived: false } : s));
+  };
+
+  const handleDelete = handleArchive;
+
+  // Timeline separation logic - filter active sessions by default
+  const uniqueDates = [...new Set(sessions.filter(s => s.status !== "archived" && !s.isArchived).map(s => s.date))].filter(Boolean).sort();
 
   const filteredSessions = sessions
-    .filter(s => activeFilter === "all" || s.date === activeFilter)
+    .filter(s => {
+      const isArchived = s.status === "archived" || s.isArchived;
+      if (activeFilter === "archived") return isArchived;
+      if (isArchived) return false;
+      return activeFilter === "all" || s.date === activeFilter;
+    })
     .sort((a, b) => {
-      // Sort by date then by start time
-      const dateA = new Date(`${a.date}T${a.startTime}`);
-      const dateB = new Date(`${b.date}T${b.startTime}`);
+      const dateA = new Date(`${a.date}T${a.startTime || "00:00"}`);
+      const dateB = new Date(`${b.date}T${b.startTime || "00:00"}`);
       return dateA - dateB;
     });
 
@@ -272,278 +284,215 @@ export default function CalendarView({
   const getGoogleCalendarLink = (session) => {
     const baseUrl = 'https://www.google.com/calendar/render?action=TEMPLATE';
     const titleText = encodeURIComponent(session.title);
-    const speakersText = session.speakers.map(s => s.name).join(', ');
-    const moderatorsText = session.moderators.map(m => m.name).join(', ');
+    const speakersText = (session.speakers || []).map(s => s.name).join(', ');
+    const moderatorsText = (session.moderators || []).map(m => m.name).join(', ');
     const descText = encodeURIComponent(
       `${session.description || ""}\n\nSpeakers: ${speakersText}${moderatorsText ? '\nModerators: ' + moderatorsText : ''}`
     );
     const start = new Date(`${session.date}T${session.startTime}`);
     const end = new Date(`${session.date}T${session.endTime}`);
-    const formatGCalDate = (date) => date.toISOString().replace(/-|:|\.\d\d\d/g, "");
+    const formatGCalDate = (d) => {
+      try {
+        return d.toISOString().replace(/-|:|\.\d\d\d/g, "");
+      } catch {
+        return "";
+      }
+    };
     const dates = `${formatGCalDate(start)}/${formatGCalDate(end)}`;
     return `${baseUrl}&text=${titleText}&details=${descText}&dates=${dates}`;
   };
 
   return (
-    <div className="flex flex-1 w-full h-[calc(100vh-80px)] overflow-hidden bg-white border border-slate-150 rounded-3xl shadow-xs">
-      {/* Resizable Sidebar (SessionEditor) */}
+    <div className="flex flex-1 w-full min-h-[calc(100vh-140px)] bg-white border border-slate-200 rounded-3xl shadow-xs overflow-hidden">
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* LEFT PANEL: CREATE A SESSION / EDIT A SESSION                      */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
       <aside 
-        className="bg-white border-r border-slate-150 p-8 flex flex-col gap-6 overflow-y-auto shrink-0 select-none"
+        className="bg-white border-r border-slate-200 p-6 sm:p-7 flex flex-col gap-5 overflow-y-auto shrink-0 select-none"
         style={{ width: `${sidebarWidth}px` }}
       >
-        <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-bold text-slate-800">
-            Session<span className="text-indigo-650">Editor</span>
-          </h1>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-            {editingSessionId ? "Modify Session" : "Add New Session"}
-          </p>
-          <p className="text-xs text-slate-500 mt-1">
-            {editingSessionId ? "Edit the details below to update the session." : "Fill in the details to create a new event session."}
+        {/* Dynamic Title: switches between Create a Session and Edit a Session */}
+        <div className="flex flex-col gap-1 pb-2 border-b border-slate-100">
+          <h2 className="text-2xl font-bold text-slate-900">
+            {editingSessionId ? "Edit a Session" : "Create a Session"}
+          </h2>
+          <p className="text-sm text-slate-500">
+            {editingSessionId 
+              ? "Edit the details below to update this session." 
+              : "Fill in the details to schedule a new event session."}
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {/* Session Title */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Session Title</label>
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Session Title *
+            </label>
             <input 
               type="text" 
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Opening Keynote" 
               required
-              className="px-4 py-3 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 text-sm"
+              className="px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:bg-white focus:border-blue-600 text-xs font-semibold"
             />
           </div>
 
+          {/* Date */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Date</label>
-            <input 
-              type="date" 
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Date *
+            </label>
+            <CustomDatePicker
               value={date}
-              onChange={(e) => setDate(e.target.value)}
-              required
-              className="px-4 py-3 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 text-sm"
+              onChange={setDate}
+              placeholder="Select session date"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          {/* Start and End Times */}
+          <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Start Time</label>
-              <input 
-                type="time" 
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Start Time *
+              </label>
+              <CustomTimePicker
                 value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                required
-                className="px-4 py-3 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 text-sm"
+                onChange={setStartTime}
+                placeholder="Start time"
               />
             </div>
+
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">End Time</label>
-              <input 
-                type="time" 
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                End Time *
+              </label>
+              <CustomTimePicker
                 value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                required
-                className="px-4 py-3 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 text-sm"
+                onChange={setEndTime}
+                placeholder="End time"
+                align="right"
               />
             </div>
           </div>
 
-          {/* Speakers Section */}
-          <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Speakers</label>
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col gap-3">
-              {attendees && attendees.length > 0 && (
-                <div className="flex flex-col gap-1">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase">Select from Attendees</span>
-                  <select
-                    value=""
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        const att = attendees.find(a => String(a.id) === e.target.value);
-                        if (att) {
-                          setSpeakerName(att.name);
-                          setSpeakerImg(att.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(att.name)}&background=random`);
-                        }
-                      }
-                    }}
-                    className="w-full px-3 py-2 border border-slate-200 bg-white rounded-xl text-xs font-semibold text-slate-800 focus:outline-none"
-                  >
-                    <option value="">-- Choose Attendee --</option>
-                    {attendees.map(a => (
-                      <option key={a.id} value={a.id}>{a.name} ({a.company || "Guest"})</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <div className="flex items-center gap-2">
-                {speakerImg ? (
-                  <div className="w-8 h-8 rounded-full border-2 border-indigo-200 bg-cover bg-center shrink-0" style={{ backgroundImage: `url(${speakerImg})` }} />
-                ) : (
-                  <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-400 shrink-0"><User size={14} /></div>
-                )}
-                
-                <input 
-                  type="text" 
-                  value={speakerName}
-                  onChange={(e) => setSpeakerName(e.target.value)}
-                  placeholder="Speaker Name"
-                  className="flex-1 bg-transparent border-none py-1 text-slate-800 placeholder-slate-400 focus:outline-none text-xs font-semibold"
-                />
-
-                <label className="w-8 h-8 rounded-full flex items-center justify-center bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-150 cursor-pointer transition-colors duration-200" title="Upload Image">
-                  <ImageIcon size={14} />
-                  <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, "speaker")} className="hidden" />
-                </label>
-
-                <button 
-                  type="button" 
-                  onClick={() => addPerson("speaker")}
-                  className="w-8 h-8 rounded-full flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-sm duration-200 shrink-0 cursor-pointer"
-                  title="Add Speaker"
-                >
-                  <Plus size={16} />
-                </button>
-              </div>
-
-              {speakersList.length > 0 && (
-                <div className="flex flex-wrap gap-2 pt-2.5 border-t border-slate-100">
-                  {speakersList.map(s => (
-                    <div key={s.id} className="flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 bg-white border border-slate-150 rounded-full text-[11px] font-semibold text-slate-700 shadow-sm">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={s.image} className="w-5 h-5 rounded-full object-cover" alt="" />
-                      <span>{s.name}</span>
-                      <button type="button" onClick={() => removePerson(s.id, "speaker")} className="text-slate-400 hover:text-rose-500 ml-1 font-bold">×</button>
-                    </div>
-                  ))}
-                </div>
-              )}
+          {/* Speakers */}
+          <div className="flex flex-col gap-2 pt-1 border-t border-slate-100">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Speakers
+            </label>
+            <div className="flex gap-2">
+              <input 
+                type="text" 
+                value={speakerName}
+                onChange={(e) => setSpeakerName(e.target.value)}
+                placeholder="Speaker Name"
+                className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-blue-600"
+              />
+              <label className="px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-xs font-bold cursor-pointer transition-colors shrink-0">
+                Photo
+                <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, "speaker")} className="hidden" />
+              </label>
+              <button 
+                type="button" 
+                onClick={() => addPerson("speaker")}
+                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer"
+              >
+                Add
+              </button>
             </div>
+
+            {speakersList.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {speakersList.map(s => (
+                  <div key={s.id} className="flex items-center gap-1.5 pl-1 pr-2 py-1 bg-slate-50 border border-slate-200 rounded-full text-[11px] font-bold text-slate-700">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={s.image} className="w-4 h-4 rounded-full object-cover" alt="" />
+                    <span className="truncate max-w-[100px]">{s.name}</span>
+                    <button type="button" onClick={() => removePerson(s.id, "speaker")} className="text-slate-400 hover:text-rose-600 font-bold ml-0.5 cursor-pointer">×</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Moderators Section */}
-          <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Moderators</label>
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col gap-3">
-              {attendees && attendees.length > 0 && (
-                <div className="flex flex-col gap-1">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase">Select from Attendees</span>
-                  <select
-                    value=""
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        const att = attendees.find(a => String(a.id) === e.target.value);
-                        if (att) {
-                          setModeratorName(att.name);
-                          setModeratorImg(att.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(att.name)}&background=random`);
-                        }
-                      }
-                    }}
-                    className="w-full px-3 py-2 border border-slate-200 bg-white rounded-xl text-xs font-semibold text-slate-800 focus:outline-none"
-                  >
-                    <option value="">-- Choose Attendee --</option>
-                    {attendees.map(a => (
-                      <option key={a.id} value={a.id}>{a.name} ({a.company || "Guest"})</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <div className="flex items-center gap-2">
-                {moderatorImg ? (
-                  <div className="w-8 h-8 rounded-full border-2 border-indigo-200 bg-cover bg-center shrink-0" style={{ backgroundImage: `url(${moderatorImg})` }} />
-                ) : (
-                  <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-400 shrink-0"><User size={14} /></div>
-                )}
-                
-                <input 
-                  type="text" 
-                  value={moderatorName}
-                  onChange={(e) => setModeratorName(e.target.value)}
-                  placeholder="Moderator Name"
-                  className="flex-1 bg-transparent border-none py-1 text-slate-800 placeholder-slate-400 focus:outline-none text-xs font-semibold"
-                />
-
-                <label className="w-8 h-8 rounded-full flex items-center justify-center bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-150 cursor-pointer transition-colors duration-200" title="Upload Image">
-                  <ImageIcon size={14} />
-                  <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, "moderator")} className="hidden" />
-                </label>
-
-                <button 
-                  type="button" 
-                  onClick={() => addPerson("moderator")}
-                  className="w-8 h-8 rounded-full flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-sm duration-200 shrink-0 cursor-pointer"
-                  title="Add Moderator"
-                >
-                  <Plus size={16} />
-                </button>
-              </div>
-
-              {moderatorsList.length > 0 && (
-                <div className="flex flex-wrap gap-2 pt-2.5 border-t border-slate-100">
-                  {moderatorsList.map(m => (
-                    <div key={m.id} className="flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 bg-white border border-slate-150 rounded-full text-[11px] font-semibold text-slate-700 shadow-sm">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={m.image} className="w-5 h-5 rounded-full object-cover" alt="" />
-                      <span>{m.name}</span>
-                      <button type="button" onClick={() => removePerson(m.id, "moderator")} className="text-slate-400 hover:text-rose-500 ml-1 font-bold">×</button>
-                    </div>
-                  ))}
-                </div>
-              )}
+          {/* Moderators */}
+          <div className="flex flex-col gap-2 pt-1 border-t border-slate-100">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Moderators
+            </label>
+            <div className="flex gap-2">
+              <input 
+                type="text" 
+                value={moderatorName}
+                onChange={(e) => setModeratorName(e.target.value)}
+                placeholder="Moderator Name"
+                className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-blue-600"
+              />
+              <label className="px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-xs font-bold cursor-pointer transition-colors shrink-0">
+                Photo
+                <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, "moderator")} className="hidden" />
+              </label>
+              <button 
+                type="button" 
+                onClick={() => addPerson("moderator")}
+                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer"
+              >
+                Add
+              </button>
             </div>
+
+            {moderatorsList.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {moderatorsList.map(m => (
+                  <div key={m.id} className="flex items-center gap-1.5 pl-1 pr-2 py-1 bg-slate-50 border border-slate-200 rounded-full text-[11px] font-bold text-slate-700">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={m.image} className="w-4 h-4 rounded-full object-cover" alt="" />
+                    <span className="truncate max-w-[100px]">{m.name}</span>
+                    <button type="button" onClick={() => removePerson(m.id, "moderator")} className="text-slate-400 hover:text-rose-600 font-bold ml-0.5 cursor-pointer">×</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Logos Section */}
-          <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Logos & Partners</label>
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col gap-3">
-              <div className="flex flex-col gap-1">
-                <span className="text-[9px] font-bold text-slate-400 uppercase">Label / Grouping Header</span>
-                <input 
-                  type="text" 
-                  value={logoLabel}
-                  onChange={(e) => setLogoLabel(e.target.value)}
-                  placeholder="e.g. Sponsors, Co-Host, Partners"
-                  className="w-full px-3 py-2 border border-slate-200 bg-white rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50"
-                />
-              </div>
+          {/* Logos & Partners */}
+          <div className="flex flex-col gap-2 pt-1 border-t border-slate-100">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Logos &amp; Partners
+            </label>
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col gap-2.5">
+              <input 
+                type="text" 
+                value={logoLabel}
+                onChange={(e) => setLogoLabel(e.target.value)}
+                placeholder="Label (e.g. Sponsor, Co-Host)"
+                className="w-full px-3 py-2 border border-slate-200 bg-white rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-600"
+              />
 
               <div className="flex items-center gap-2">
-                {logoImg ? (
-                  <div className="w-8 h-8 rounded-lg border-2 border-indigo-200 bg-contain bg-center bg-no-repeat shrink-0 bg-white" style={{ backgroundImage: `url(${logoImg})` }} />
-                ) : (
-                  <div className="w-8 h-8 rounded-lg bg-slate-200 flex items-center justify-center text-slate-400 shrink-0"><ImageIcon size={14} /></div>
-                )}
-                
-                <span className="text-xs text-slate-500 flex-1 truncate">
-                  {logoImg ? "Logo uploaded" : "Upload logo image..."}
-                </span>
-
-                <label className="w-8 h-8 rounded-full flex items-center justify-center bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-150 cursor-pointer transition-colors duration-200" title="Upload Logo">
-                  <ImageIcon size={14} />
+                <label className="flex-1 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-xs font-bold cursor-pointer transition-colors text-center truncate">
+                  {logoImg ? "Logo Selected" : "Upload Logo Image"}
                   <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, "logo")} className="hidden" />
                 </label>
 
                 <button 
                   type="button" 
                   onClick={addLogo}
-                  className="w-8 h-8 rounded-full flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-sm duration-200 shrink-0 cursor-pointer"
-                  title="Add Logo"
+                  className="px-3.5 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all shadow-xs shrink-0 cursor-pointer"
                 >
-                  <Plus size={16} />
+                  Add
                 </button>
               </div>
 
               {logosList.length > 0 && (
-                <div className="flex flex-wrap gap-2 pt-2.5 border-t border-slate-100">
+                <div className="flex flex-wrap gap-1.5 pt-2 border-t border-slate-200/80">
                   {logosList.map(l => (
-                    <div key={l.id} className="flex items-center gap-1.5 pl-1.5 pr-2 py-1 bg-white border border-slate-150 rounded-xl text-[10px] font-semibold text-slate-700 shadow-sm">
+                    <div key={l.id} className="flex items-center gap-1.5 pl-1.5 pr-2 py-1 bg-white border border-slate-200 rounded-xl text-[10px] font-semibold text-slate-700 shadow-2xs">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={l.image} className="h-4 object-contain max-w-[60px]" alt="" />
-                      <span className="text-[9px] text-slate-400 font-bold bg-slate-100 px-1.5 py-0.5 rounded truncate max-w-[80px]">{l.label}</span>
+                      <span className="text-[9px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded truncate max-w-[80px]">{l.label}</span>
                       <button type="button" onClick={() => removeLogo(l.id)} className="text-slate-400 hover:text-rose-500 ml-1 font-bold text-xs">×</button>
                     </div>
                   ))}
@@ -552,30 +501,34 @@ export default function CalendarView({
             </div>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Description</label>
+          {/* Description */}
+          <div className="flex flex-col gap-1.5 pt-1 border-t border-slate-100">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Description
+            </label>
             <textarea 
-              rows={4}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Tell us about this session..."
-              className="px-4 py-3 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 text-sm resize-none"
+              rows={3} 
+              value={description} 
+              onChange={(e) => setDescription(e.target.value)} 
+              placeholder="Tell us about this session..." 
+              className="px-3.5 py-2.5 border border-slate-200 bg-slate-50 focus:bg-white rounded-xl text-slate-800 focus:outline-none focus:border-blue-600 text-xs resize-none font-medium"
             />
           </div>
 
-          <div className="flex flex-col gap-2.5 mt-2">
+          {/* Form Action Buttons */}
+          <div className="flex flex-col gap-2 pt-2 border-t border-slate-100">
             <button 
-              type="submit"
-              className="w-full bg-indigo-650 hover:bg-indigo-700 text-white py-3.5 px-4 rounded-xl font-semibold text-sm transition-all hover:shadow-lg hover:-translate-y-0.5 duration-200 cursor-pointer"
+              type="submit" 
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-xl font-bold text-xs transition-all shadow-md shadow-blue-600/20 cursor-pointer"
             >
-              {editingSessionId ? "✓ Update Session" : "+ Create Session"}
+              {editingSessionId ? "Update Session" : "Create Session"}
             </button>
 
             {editingSessionId && (
               <button 
                 type="button"
                 onClick={resetForm}
-                className="w-full bg-white border border-slate-250 hover:bg-slate-50 text-slate-700 py-3.5 px-4 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer"
+                className="w-full bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 py-2.5 px-4 rounded-xl font-bold text-xs transition-all cursor-pointer"
               >
                 Cancel Edit
               </button>
@@ -584,25 +537,36 @@ export default function CalendarView({
         </form>
       </aside>
 
-      {/* Resizer Divider Bar */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* RESIZABLE DIVIDER BAR                                               */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
       <div 
-        className="w-1.5 hover:bg-indigo-500 active:bg-indigo-600 cursor-col-resize transition-all duration-150 shrink-0 self-stretch z-10 bg-slate-100 flex items-center justify-center" 
+        className="w-1.5 hover:bg-blue-500 active:bg-blue-600 cursor-col-resize transition-all shrink-0 self-stretch z-10 bg-slate-100 flex items-center justify-center select-none" 
         onMouseDown={startResizing}
+        title="Drag to resize panel"
       >
-        <div className="w-0.5 h-8 bg-slate-300 rounded-full"></div>
+        <div className="w-0.5 h-8 bg-slate-300 rounded-full" />
       </div>
 
-      {/* Main Sessions Timeline Area */}
-      <section className="flex-1 bg-slate-50 p-10 flex flex-col overflow-y-auto">
-        <header className="flex justify-between items-center mb-8">
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* RIGHT PANEL: EVENT TIMELINE & SESSIONS                              */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      <section className="flex-1 bg-slate-50/70 p-6 sm:p-8 flex flex-col overflow-y-auto">
+        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
           <div>
-            <h2 className="text-2xl font-bold text-slate-900">Event Timeline & Sessions</h2>
-            <p className="text-sm text-slate-500">Sort, view, edit, and organize scheduled sessions by day.</p>
+            <h2 className="text-2xl font-bold text-slate-900">
+              Event Timeline &amp; Sessions
+            </h2>
+            <p className="text-sm text-slate-500">
+              Sort, view, edit, and organize scheduled sessions by day.
+            </p>
           </div>
+
           {sessions.length > 0 && (
             <button 
+              type="button"
               onClick={onClearAllSessions}
-              className="px-4 py-2 bg-white border border-slate-200 hover:border-rose-450 hover:text-rose-500 text-slate-650 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer"
+              className="px-3.5 py-2 bg-white border border-slate-200 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 text-slate-600 rounded-xl text-xs font-bold transition-all cursor-pointer self-start sm:self-auto shadow-2xs"
             >
               Clear All
             </button>
@@ -611,18 +575,24 @@ export default function CalendarView({
 
         {/* Dynamic Day Filter Tabs */}
         {uniqueDates.length > 1 && (
-          <div className="flex gap-2 p-1.5 bg-slate-150 rounded-full w-fit mb-8 max-w-full overflow-x-auto shrink-0 scrollbar-none">
+          <div className="flex gap-2 p-1.5 bg-slate-200/70 rounded-2xl w-fit mb-6 max-w-full overflow-x-auto shrink-0 scrollbar-none">
             <button
+              type="button"
               onClick={() => setActiveFilter("all")}
-              className={`px-5 py-2.5 rounded-full font-semibold text-xs transition-all duration-200 cursor-pointer whitespace-nowrap ${activeFilter === "all" ? "bg-white text-indigo-650 shadow-sm" : "text-slate-500 hover:text-indigo-600"}`}
+              className={`px-4 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer whitespace-nowrap ${
+                activeFilter === "all" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"
+              }`}
             >
-              All Dates
+              All Dates ({sessions.length})
             </button>
             {uniqueDates.map((date, i) => (
               <button
                 key={date}
+                type="button"
                 onClick={() => setActiveFilter(date)}
-                className={`px-5 py-2.5 rounded-full font-semibold text-xs transition-all duration-200 cursor-pointer whitespace-nowrap ${activeFilter === date ? "bg-white text-indigo-650 shadow-sm" : "text-slate-500 hover:text-indigo-600"}`}
+                className={`px-4 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer whitespace-nowrap ${
+                  activeFilter === date ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"
+                }`}
               >
                 Day {i + 1} ({formatDateLabel(date)})
               </button>
@@ -631,20 +601,19 @@ export default function CalendarView({
         )}
 
         {/* Sessions list */}
-        <div className="flex flex-col gap-6 max-w-4xl">
+        <div className="flex flex-col gap-4 w-full">
           {filteredSessions.length === 0 ? (
-            <div className="flex flex-col items-center justify-center text-center p-20 bg-white border border-slate-150 rounded-3xl gap-4 text-slate-400">
-              <Calendar size={64} className="opacity-30" />
+            <div className="flex flex-col items-center justify-center text-center p-16 bg-white border border-slate-200 rounded-3xl gap-3 text-slate-400">
+              <Calendar size={48} className="opacity-25" />
               <div>
-                <h3 className="text-lg font-bold text-slate-700">No sessions scheduled</h3>
-                <p className="text-sm text-slate-400 mt-1">Use the sidebar on the left to add your first session details.</p>
+                <h3 className="text-base font-bold text-slate-700">No sessions scheduled</h3>
+                <p className="text-xs text-slate-400 mt-1">Use the panel on the left to add your first session details.</p>
               </div>
             </div>
           ) : (
             (() => {
               let lastDate = null;
               return filteredSessions.map(session => {
-                // Render Day Separator if date changes in "All Dates" view
                 const renderSeparator = activeFilter === "all" && session.date !== lastDate;
                 if (renderSeparator) {
                   lastDate = session.date;
@@ -653,65 +622,74 @@ export default function CalendarView({
                 return (
                   <React.Fragment key={session.id}>
                     {renderSeparator && (
-                      <div className="flex items-center gap-4 mt-6 mb-4 select-none">
-                        <h3 className="text-xs font-bold text-indigo-650 tracking-widest uppercase shrink-0">
+                      <div className="flex items-center gap-4 mt-4 mb-2 select-none">
+                        <span className="text-xs font-black text-blue-600 tracking-wider uppercase shrink-0">
                           {formatFullDate(session.date)}
-                        </h3>
-                        <div className="h-px bg-slate-200 flex-1"></div>
+                        </span>
+                        <div className="h-px bg-slate-200 flex-1" />
                       </div>
                     )}
 
-                    <div className="bg-white border border-slate-150 rounded-3xl p-8 flex flex-col gap-5 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 relative group overflow-hidden">
+                    <div className="bg-white border border-slate-200 rounded-3xl p-6 flex flex-col gap-4 hover:shadow-md transition-all relative group">
                       <div className="flex justify-between items-start gap-4">
-                        <div className="flex items-center gap-2 text-indigo-600 font-bold text-xs select-none">
-                          <Clock size={14} />
-                          <span>{session.startTime} - {session.endTime}</span>
+                        <div className="px-3 py-1 bg-blue-50 border border-blue-200/80 rounded-full text-blue-700 font-extrabold text-xs select-none">
+                          <span>{session.startTime} — {session.endTime}</span>
                         </div>
-                        <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+
+                        <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button 
+                            type="button"
                             onClick={() => startEdit(session)}
-                            className="p-2 bg-slate-50 border border-slate-200 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-100 rounded-xl transition-all duration-200 cursor-pointer"
+                            className="px-2.5 py-1 bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-lg text-xs font-bold transition-colors cursor-pointer"
                             title="Edit Session"
                           >
-                            <Edit2 size={14} />
+                            Edit
                           </button>
                           <button 
-                            onClick={() => handleDelete(session.id)}
-                            className="p-2 bg-rose-50 border border-rose-100 text-rose-550 hover:text-white hover:bg-rose-500 hover:border-rose-500 rounded-xl transition-all duration-200 cursor-pointer"
-                            title="Delete Session"
+                            type="button"
+                            onClick={() => handleArchive(session.id)}
+                            className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                            title="Archive Session (Data preserved)"
                           >
-                            <Trash2 size={14} />
+                            <Archive size={11} />
+                            <span>Archive</span>
                           </button>
                         </div>
                       </div>
 
-                      <h3 className="text-xl font-bold text-slate-800 leading-snug">{session.title}</h3>
+                      <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-snug">
+                        {session.title}
+                      </h3>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="flex flex-col gap-2">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider select-none">Speakers</span>
-                          <div className="flex flex-wrap gap-2.5">
-                            {Array.isArray(session.speakers) && session.speakers.map((s, idx) => (
-                              s ? (
-                                <div key={idx} className="flex items-center gap-2 bg-slate-50 border border-slate-150 pl-1.5 pr-3 py-1.5 rounded-full text-xs font-semibold text-slate-700 shadow-sm">
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img src={s.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name || "User")}`} className="w-6 h-6 rounded-full object-cover shrink-0" alt="" />
-                                  <span className="truncate max-w-[120px]">{s.name || "Unknown"}</span>
-                                </div>
-                              ) : null
-                            ))}
+                        {/* Speakers */}
+                        {Array.isArray(session.speakers) && session.speakers.length > 0 && (
+                          <div className="flex flex-col gap-1.5">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider select-none">Speakers</span>
+                            <div className="flex flex-wrap gap-2">
+                              {session.speakers.map((s, idx) => (
+                                s ? (
+                                  <div key={idx} className="flex items-center gap-2 bg-slate-50 border border-slate-200 pl-1.5 pr-2.5 py-1 rounded-full text-xs font-bold text-slate-700">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img src={s.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name || "User")}`} className="w-5 h-5 rounded-full object-cover shrink-0" alt="" />
+                                    <span className="truncate max-w-[120px]">{s.name || "Unknown"}</span>
+                                  </div>
+                                ) : null
+                              ))}
+                            </div>
                           </div>
-                        </div>
+                        )}
 
+                        {/* Moderators */}
                         {Array.isArray(session.moderators) && session.moderators.length > 0 && (
-                          <div className="flex flex-col gap-2">
+                          <div className="flex flex-col gap-1.5">
                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider select-none">Moderators</span>
-                            <div className="flex flex-wrap gap-2.5">
+                            <div className="flex flex-wrap gap-2">
                               {session.moderators.map((m, idx) => (
                                 m ? (
-                                  <div key={idx} className="flex items-center gap-2 bg-slate-50 border border-slate-150 pl-1.5 pr-3 py-1.5 rounded-full text-xs font-semibold text-slate-700 shadow-sm">
+                                  <div key={idx} className="flex items-center gap-2 bg-slate-50 border border-slate-200 pl-1.5 pr-2.5 py-1 rounded-full text-xs font-bold text-slate-700">
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img src={m.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(m.name || "User")}`} className="w-6 h-6 rounded-full object-cover shrink-0" alt="" />
+                                    <img src={m.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(m.name || "User")}`} className="w-5 h-5 rounded-full object-cover shrink-0" alt="" />
                                     <span className="truncate max-w-[120px]">{m.name || "Unknown"}</span>
                                   </div>
                                 ) : null
@@ -723,49 +701,34 @@ export default function CalendarView({
 
                       {/* Session Logos Section */}
                       {Array.isArray(session.logos) && session.logos.length > 0 && (
-                        <div className="flex flex-col gap-4 border-t border-slate-100 pt-4 mt-2">
-                          {Object.entries(
-                            session.logos.reduce((acc, item) => {
-                              if (!item) return acc;
-                              const label = item.label || "Sponsor";
-                              if (!acc[label]) acc[label] = [];
-                              acc[label].push(item);
-                              return acc;
-                            }, {})
-                          ).map(([label, items]) => (
-                            <div key={label} className="flex flex-col gap-2">
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider select-none">
-                                {label}
-                              </span>
-                              <div className="flex flex-wrap gap-3 items-center">
-                                {items.map((logo, idx) => (
-                                  logo && logo.image ? (
-                                    <div key={idx} className="flex items-center justify-center bg-white border border-slate-150 px-3 py-2 rounded-2xl h-12 min-w-[48px] shadow-sm select-none">
-                                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                                      <img src={logo.image} className="h-7 object-contain max-w-[150px]" alt="logo" />
-                                    </div>
-                                  ) : null
-                                ))}
+                        <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+                          {session.logos.map((logo, idx) => (
+                            logo && logo.image ? (
+                              <div key={idx} className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-xl">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={logo.image} className="h-4 object-contain max-w-[70px]" alt="" />
+                                <span className="text-[10px] font-bold text-slate-500">{logo.label}</span>
                               </div>
-                            </div>
+                            ) : null
                           ))}
                         </div>
                       )}
 
-                      {/* Description - wrapping text, scrollbar if too long */}
-                      <p className="text-xs text-slate-500 leading-relaxed max-h-[120px] overflow-y-auto pr-2 whitespace-pre-wrap break-words border-t border-slate-100 pt-4">
-                        {session.description || "No description provided."}
-                      </p>
+                      {/* Description */}
+                      {session.description && (
+                        <p className="text-xs text-slate-500 leading-relaxed border-t border-slate-100 pt-3">
+                          {session.description}
+                        </p>
+                      )}
 
-                      <div className="flex border-t border-slate-100 pt-4 mt-1 justify-start">
+                      {/* Calendar Link */}
+                      <div className="flex border-t border-slate-100 pt-3 justify-start">
                         <a 
                           href={getGoogleCalendarLink(session)} 
                           target="_blank" 
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-650 bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-150 hover:text-indigo-650 px-4 py-2 rounded-xl transition-all duration-200"
+                          className="text-xs font-bold text-slate-700 bg-slate-50 hover:bg-blue-50 hover:text-blue-700 border border-slate-200 px-3.5 py-1.5 rounded-xl transition-colors"
                         >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src="https://www.gstatic.com/calendar/images/dynamiclogo_2020q4/calendar_31_2x.png" className="w-4.5 h-4.5 object-contain" alt="" />
                           Add to Google Calendar
                         </a>
                       </div>

@@ -89,3 +89,49 @@ CREATE POLICY "Public access policy" ON public.forms FOR ALL USING (true) WITH C
 DROP POLICY IF EXISTS "Public access policy" ON public.form_submissions;
 CREATE POLICY "Public access policy" ON public.form_submissions FOR ALL USING (true) WITH CHECK (true);
 
+-- 11. RSVPs & RSVP Settings Tables
+CREATE TABLE IF NOT EXISTS public.rsvps (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  event_id UUID REFERENCES public.events(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  full_name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  phone TEXT,
+  company TEXT,
+  job_title TEXT,
+  status TEXT NOT NULL DEFAULT 'attending',
+  plus_ones INTEGER DEFAULT 0,
+  plus_ones_names JSONB DEFAULT '[]'::jsonb,
+  dietary_preference TEXT DEFAULT 'None',
+  dietary_notes TEXT,
+  notes TEXT,
+  checked_in BOOLEAN DEFAULT FALSE,
+  checked_in_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.rsvp_settings (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  event_id UUID REFERENCES public.events(id) ON DELETE CASCADE UNIQUE,
+  is_enabled BOOLEAN DEFAULT TRUE,
+  capacity_limit INTEGER DEFAULT 150,
+  allow_plus_ones BOOLEAN DEFAULT TRUE,
+  max_plus_ones INTEGER DEFAULT 2,
+  allow_waitlist BOOLEAN DEFAULT TRUE,
+  deadline TIMESTAMPTZ,
+  collect_dietary BOOLEAN DEFAULT TRUE,
+  collect_company BOOLEAN DEFAULT TRUE,
+  collect_phone BOOLEAN DEFAULT TRUE,
+  confirmation_message TEXT DEFAULT 'Thank you for your RSVP! We look forward to seeing you at the event.',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.rsvps ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rsvp_settings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public access policy" ON public.rsvps;
+CREATE POLICY "Public access policy" ON public.rsvps FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Public access policy" ON public.rsvp_settings;
+CREATE POLICY "Public access policy" ON public.rsvp_settings FOR ALL USING (true) WITH CHECK (true);
+
