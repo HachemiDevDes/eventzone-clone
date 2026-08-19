@@ -545,8 +545,8 @@ export function HomeContent() {
           const validViews = [
             "home", "auth", "profile", "my-tickets", "events-hub", "create-event", "event-landing", "register", "visitor-portal", "overview", "page-builder", "calendar", "event-details", 
             "attendees", "pending", "organizations", "sponsors", 
-            "exhibitors", "speakers", "tickets", "check-in", 
-            "my-team", "analytics", "communications"
+            "exhibitors", "speakers", "tickets", "forms", "rsvp", "check-in", 
+            "my-team", "analytics", "communications", "floor-plan"
           ];
           if (validViews.includes(viewParam)) {
             setCurrentView(viewParam);

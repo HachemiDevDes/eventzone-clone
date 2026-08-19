@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
 import QRCode from "qrcode";
+import CountryPhoneInput from "./CountryPhoneInput";
 
 export const DIETARY_OPTIONS = [
   { id: "None", label: "Standard / No Restrictions", icon: "🍽️" },
@@ -466,12 +467,10 @@ export default function PublicRSVPModal({
                     <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">
                       {t("rsvp.phone", "Phone Number")}
                     </label>
-                    <input
-                      type="tel"
+                    <CountryPhoneInput
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="+213 ..."
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-600 focus:bg-white transition-colors"
+                      onChange={setPhone}
+                      placeholder="550 12 34 56"
                     />
                   </div>
 

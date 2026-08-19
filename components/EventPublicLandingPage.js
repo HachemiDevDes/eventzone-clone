@@ -13,6 +13,7 @@ import {
 import QRCode from "qrcode";
 import { useLanguage } from "../lib/i18n";
 import PublicRSVPModal from "./PublicRSVPModal";
+import CountryPhoneInput from "./CountryPhoneInput";
 
 export default function EventPublicLandingPage({
   eventId,
@@ -1535,21 +1536,21 @@ export default function EventPublicLandingPage({
                           {t("reg.badgeCredentials", "2. Attendee Badge Credentials")}
                         </label>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                              {t("reg.fullName", "Your Full Name")} <span className="text-rose-500">*</span>
-                            </label>
-                            <input
-                              type="text"
-                              required
-                              value={rsvpName}
-                              onChange={(e) => setRsvpName(e.target.value)}
-                              placeholder="e.g. Sarah Jenkins"
-                              className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-semibold text-slate-900 outline-none transition-all"
-                            />
-                          </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                            {t("reg.fullName", "Your Full Name")} <span className="text-rose-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={rsvpName}
+                            onChange={(e) => setRsvpName(e.target.value)}
+                            placeholder="e.g. Sarah Jenkins"
+                            className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-semibold text-slate-900 outline-none transition-all"
+                          />
+                        </div>
 
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
                             <label className="block text-[11px] font-bold text-slate-700 mb-1">
                               {t("reg.email", "Your Email Address")} <span className="text-rose-500">*</span>
@@ -1561,6 +1562,18 @@ export default function EventPublicLandingPage({
                               onChange={(e) => setRsvpEmail(e.target.value)}
                               placeholder="e.g. alex@company.com"
                               className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-semibold text-slate-900 outline-none transition-all"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                              {t("reg.phone", "Phone Number")} <span className="text-rose-500">*</span>
+                            </label>
+                            <CountryPhoneInput
+                              value={rsvpPhone}
+                              onChange={setRsvpPhone}
+                              required
+                              inputClassName="py-3"
                             />
                           </div>
                         </div>
@@ -1601,7 +1614,9 @@ export default function EventPublicLandingPage({
                             {t("reg.additionalQuestions", "3. Additional Registration Questions")}
                           </div>
 
-                          {activeTicketForm.fields.map(field => {
+                          {activeTicketForm.fields
+                            .filter(f => !["f_core_name", "f_core_email", "f_core_phone"].includes(f.id))
+                            .map(field => {
                             if (field.type === "section") {
                               return (
                                 <div key={field.id} className="pt-2">
@@ -1617,7 +1632,16 @@ export default function EventPublicLandingPage({
                                   {field.label} {field.required && <span className="text-rose-500">*</span>}
                                 </label>
 
-                                {["text", "email", "number"].includes(field.type) && (
+                                {(field.type === "phone" || field.id === "f_core_phone") && (
+                                  <CountryPhoneInput
+                                    value={customAnswers[field.id] || ""}
+                                    onChange={(val) => setCustomAnswers(prev => ({ ...prev, [field.id]: val }))}
+                                    placeholder={field.placeholder || ""}
+                                    required={field.required}
+                                  />
+                                )}
+
+                                {["text", "email", "number"].includes(field.type) && field.id !== "f_core_phone" && (
                                   <input
                                     type={field.type}
                                     required={field.required}
@@ -1889,7 +1913,16 @@ export default function EventPublicLandingPage({
                       </label>
                       {field.helpText && <p className="text-[11px] text-slate-400">{field.helpText}</p>}
 
-                      {["text", "email", "number"].includes(field.type) && (
+                      {(field.type === "phone" || field.id === "f_core_phone") && (
+                        <CountryPhoneInput
+                          value={feedbackAnswers[field.id] || ""}
+                          onChange={(val) => setFeedbackAnswers(prev => ({ ...prev, [field.id]: val }))}
+                          placeholder={field.placeholder || ""}
+                          required={field.required}
+                        />
+                      )}
+
+                      {["text", "email", "number"].includes(field.type) && field.id !== "f_core_phone" && (
                         <input
                           type={field.type}
                           required={field.required}

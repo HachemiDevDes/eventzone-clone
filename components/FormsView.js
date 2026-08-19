@@ -13,20 +13,22 @@ import {
   Lock, Archive, RotateCcw
 } from "lucide-react";
 import QRCode from "qrcode";
+import CountryPhoneInput from "./CountryPhoneInput";
 
 // Available field types in the toolbox
 const FIELD_TYPES = [
   { type: "text", label: "Short Text", icon: Type, description: "Single line input for names, titles, URLs", category: "Standard" },
   { type: "textarea", label: "Paragraph", icon: AlignLeft, description: "Multi-line text for feedback and notes", category: "Standard" },
+  { type: "phone", label: "Phone Number", icon: Phone, description: "International phone with country code selector", category: "Standard" },
+  { type: "email", label: "Email Address", icon: Mail, description: "Validated email input", category: "Standard" },
+  { type: "number", label: "Number", icon: Hash, description: "Numeric values, age, quantities", category: "Standard" },
+  { type: "date", label: "Date Picker", icon: Calendar, description: "Calendar date selection", category: "Standard" },
   { type: "select", label: "Dropdown Menu", icon: ChevronDown, description: "Single option from a dropdown list", category: "Choices" },
   { type: "radio", label: "Single Choice", icon: Radio, description: "Radio buttons where one option is selected", category: "Choices" },
   { type: "checkbox", label: "Checkboxes", icon: CheckSquare, description: "Multi-select list of checkboxes", category: "Choices" },
+  { type: "switch", label: "Yes / No Toggle", icon: ToggleRight, description: "Boolean switch for consent or opt-in", category: "Choices" },
   { type: "rating", label: "5-Star Rating", icon: Star, description: "Interactive 1 to 5 star rating for reviews", category: "Feedback" },
   { type: "nps", label: "NPS Scale (0-10)", icon: BarChart2, description: "Net Promoter Score recommendation scale", category: "Feedback" },
-  { type: "number", label: "Number", icon: Hash, description: "Numeric values, age, quantities", category: "Standard" },
-  { type: "email", label: "Email Address", icon: Mail, description: "Validated email input", category: "Standard" },
-  { type: "date", label: "Date Picker", icon: Calendar, description: "Calendar date selection", category: "Standard" },
-  { type: "switch", label: "Yes / No Toggle", icon: ToggleRight, description: "Boolean switch for consent or opt-in", category: "Choices" },
   { type: "section", label: "Section Header", icon: Layers, description: "Section title and description divider", category: "Layout" },
 ];
 
@@ -52,9 +54,9 @@ export const CORE_LOCKED_FIELDS = [
   },
   {
     id: "f_core_phone",
-    type: "text",
+    type: "phone",
     label: "Phone Number",
-    placeholder: "+1 (555) 000-0000",
+    placeholder: "550 12 34 56",
     required: true,
     isLocked: true,
     options: []
@@ -66,7 +68,7 @@ export function ensureCoreLockedFields(fields = []) {
   
   const hasName = current.some(f => f.id === "f_core_name" || (f.isLocked && f.label?.toLowerCase().includes("name")));
   const hasEmail = current.some(f => f.id === "f_core_email" || (f.isLocked && f.type === "email"));
-  const hasPhone = current.some(f => f.id === "f_core_phone" || (f.isLocked && f.label?.toLowerCase().includes("phone")));
+  const hasPhone = current.some(f => f.id === "f_core_phone" || (f.isLocked && (f.type === "phone" || f.label?.toLowerCase().includes("phone"))));
 
   const missing = [];
   if (!hasName) missing.push({ ...CORE_LOCKED_FIELDS[0] });
@@ -74,8 +76,11 @@ export function ensureCoreLockedFields(fields = []) {
   if (!hasPhone) missing.push({ ...CORE_LOCKED_FIELDS[2] });
 
   const sanitized = current.map(f => {
-    if (f.id === "f_core_name" || f.id === "f_core_email" || f.id === "f_core_phone") {
+    if (f.id === "f_core_name" || f.id === "f_core_email") {
       return { ...f, isLocked: true, required: true };
+    }
+    if (f.id === "f_core_phone") {
+      return { ...f, type: "phone", isLocked: true, required: true };
     }
     return f;
   });
@@ -699,22 +704,22 @@ export default function FormsView({
             {/* Right Column: Questions Canvas */}
             <div className="lg:col-span-8 flex flex-col gap-4">
               {/* Form Overview Banner Card */}
-              <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-3xl p-6 shadow-sm flex flex-col gap-2 relative overflow-hidden">
-                <div className="absolute right-0 top-0 translate-x-4 -translate-y-4 w-40 h-40 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+              <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs flex flex-col gap-3 relative">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-blue-200 bg-white/10 px-2.5 py-1 rounded-full backdrop-blur-md">
-                    {editingForm.type === "ticket_registration" ? "🎟️ Ticket Registration Form" : "⭐ Attendee Survey & Feedback"}
+                  <span className="text-[11px] font-bold tracking-wide uppercase text-blue-700 bg-blue-50 border border-blue-100/80 px-3 py-1 rounded-full flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
+                    {editingForm.type === "ticket_registration" ? "Ticket Registration Form" : "Attendee Survey & Feedback"}
                   </span>
-                  <span className="text-xs font-medium text-blue-100">
-                    Linked: {editingForm.ticketId === "all" ? "All Ticket Tiers" : editingForm.ticketId}
+                  <span className="text-xs font-semibold text-slate-500">
+                    Linked: <span className="text-slate-800 font-bold">{editingForm.ticketId === "all" ? "All Ticket Tiers" : editingForm.ticketId}</span>
                   </span>
                 </div>
                 <textarea
                   value={editingForm.description}
                   onChange={(e) => setEditingForm(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Form description / introduction text for respondents..."
+                  placeholder="Enter instructions or context for this form..."
                   rows={2}
-                  className="text-xs text-blue-50 bg-white/10 hover:bg-white/15 focus:bg-white/20 rounded-xl p-2.5 border border-white/10 outline-none placeholder:text-blue-200/60 font-medium transition-all"
+                  className="w-full text-xs font-medium text-slate-800 bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-blue-600 rounded-2xl p-3 outline-none placeholder:text-slate-400 transition-all resize-none shadow-2xs"
                 />
               </div>
 
@@ -858,17 +863,17 @@ export default function FormsView({
                         </div>
                       )}
 
-                      {/* Placeholder field (for text/textarea/number/email) */}
-                      {["text", "textarea", "number", "email"].includes(field.type) && (
+                      {/* Placeholder field (for text/textarea/number/email/phone) */}
+                      {["text", "textarea", "number", "email", "phone"].includes(field.type) && (
                         <div>
                           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                            Input Placeholder Hint
+                            {field.type === "phone" ? "Sample / Format Hint" : "Input Placeholder Hint"}
                           </label>
                           <input
                             type="text"
                             value={field.placeholder || ""}
                             onChange={(e) => handleUpdateField(field.id, { placeholder: e.target.value })}
-                            placeholder="e.g. Enter your details..."
+                            placeholder={field.type === "phone" ? "e.g. 550 12 34 56" : "e.g. Enter your details..."}
                             className="w-full px-3.5 py-1.5 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-medium text-slate-700 outline-none transition-all"
                           />
                         </div>
@@ -1126,8 +1131,18 @@ export default function FormsView({
                             </span>
                           )}
 
+                          {/* Phone Number with Country Code Picker */}
+                          {(field.type === "phone" || field.id === "f_core_phone") && (
+                            <CountryPhoneInput
+                              value={previewAnswers[field.id] || ""}
+                              onChange={(val) => setPreviewAnswers(prev => ({ ...prev, [field.id]: val }))}
+                              placeholder={field.placeholder || ""}
+                              required={field.required}
+                            />
+                          )}
+
                           {/* Short text / Number / Email / Date */}
-                          {["text", "number", "email", "date"].includes(field.type) && (
+                          {["text", "number", "email", "date"].includes(field.type) && field.id !== "f_core_phone" && (
                             <input
                               type={field.type}
                               value={previewAnswers[field.id] || ""}
