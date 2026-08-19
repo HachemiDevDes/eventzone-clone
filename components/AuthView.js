@@ -299,6 +299,7 @@ export default function AuthView({
           <img 
             src="https://i.imgur.com/jFDrQbM.png" 
             alt="Eventzone" 
+            style={{ height: '28px', width: 'auto', maxWidth: '160px', objectFit: 'contain' }}
             className="h-6 sm:h-7 w-auto object-contain transition-transform group-hover:scale-105" 
           />
         </button>

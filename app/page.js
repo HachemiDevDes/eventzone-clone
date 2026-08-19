@@ -80,7 +80,7 @@ const INDUSTRIES = [
 
 export function HomeContent() {
   const { t, lang, setLang, isRTL, dir, languages } = useLanguage();
-  const [mounted, setMounted] = useState(false);
+  const [mounted, setMounted] = useState(() => typeof window !== "undefined");
 
   // Authentication & Role State
   const [currentUser, setCurrentUser] = useState(null);
@@ -1096,20 +1096,7 @@ export function HomeContent() {
   };
 
 
-  // Prevent hydration mismatch between server-rendered HTML and client URL-selected view
-  if (!mounted) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center font-sans">
-        <div className="flex flex-col items-center gap-3 animate-fade-in">
-          <img 
-            src="https://i.imgur.com/jFDrQbM.png" 
-            alt="eventzone" 
-            className="h-8 w-auto object-contain opacity-80 animate-pulse" 
-          />
-        </div>
-      </div>
-    );
-  }
+
 
   // ==========================================================================
   // 0.5. DEDICATED FULL-PAGE AUTHENTICATION VIEW (SIGN IN / SIGN UP)
@@ -2163,6 +2150,7 @@ export default function Home() {
           <img 
             src="https://i.imgur.com/jFDrQbM.png" 
             alt="eventzone" 
+            style={{ width: "130px", height: "auto", maxHeight: "32px", maxWidth: "100%" }}
             className="h-8 w-auto object-contain opacity-80 animate-pulse" 
           />
         </div>

@@ -529,7 +529,7 @@ export default function MainHomePage({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 pb-12 border-b border-slate-100 items-start">
             <div className="lg:col-span-6 space-y-4 text-left">
               <div className="flex items-center gap-3">
-                <img src="https://i.imgur.com/jFDrQbM.png" alt="eventzone" className="h-7 w-auto object-contain" />
+                <img src="https://i.imgur.com/jFDrQbM.png" alt="eventzone" style={{ height: '28px', width: 'auto', maxWidth: '160px', objectFit: 'contain' }} className="h-7 w-auto object-contain" />
                 <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-extrabold uppercase tracking-wider">
                   Event SaaS Platform
                 </span>

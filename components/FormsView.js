@@ -10,16 +10,23 @@ import {
   Monitor, Star, ToggleLeft, ToggleRight, CheckSquare, 
   Radio, Calendar, Hash, Type, AlignLeft, Mail, Phone,
   QrCode, Award, UserCheck, AlertCircle, X, Layers, RefreshCw,
-  Lock, Archive, RotateCcw
+  Lock, Archive, RotateCcw, Globe, MapPin, Camera, Users,
+  Briefcase, Megaphone, Target
 } from "lucide-react";
 import QRCode from "qrcode";
 import CountryPhoneInput from "./CountryPhoneInput";
+import { CountrySelect, CitySelect } from "./LocationInputs";
+import FormImageUploader from "./FormImageUploader";
+import { PRESET_SMART_FIELDS } from "../lib/formPresets";
 
 // Available field types in the toolbox
 const FIELD_TYPES = [
   { type: "text", label: "Short Text", icon: Type, description: "Single line input for names, titles, URLs", category: "Standard" },
   { type: "textarea", label: "Paragraph", icon: AlignLeft, description: "Multi-line text for feedback and notes", category: "Standard" },
   { type: "phone", label: "Phone Number", icon: Phone, description: "International phone with country code selector", category: "Standard" },
+  { type: "country", label: "Country Selector", icon: Globe, description: "Searchable country selector with flags", category: "Standard" },
+  { type: "city", label: "City", icon: MapPin, description: "Dynamic city dropdown linked to selected country", category: "Standard" },
+  { type: "picture", label: "Photo / Picture Upload", icon: Camera, description: "Upload from mobile camera or PC file", category: "Standard" },
   { type: "email", label: "Email Address", icon: Mail, description: "Validated email input", category: "Standard" },
   { type: "number", label: "Number", icon: Hash, description: "Numeric values, age, quantities", category: "Standard" },
   { type: "date", label: "Date Picker", icon: Calendar, description: "Calendar date selection", category: "Standard" },
@@ -394,6 +401,25 @@ export default function FormsView({
     }));
   };
 
+  const handleAppendPresetField = (preset) => {
+    if (!editingForm) return;
+    const newField = {
+      id: `f_${preset.id.replace('preset_', '')}_${Date.now()}`,
+      type: preset.type,
+      label: preset.label,
+      placeholder: preset.placeholder || "",
+      helpText: preset.description || "",
+      required: preset.required ?? false,
+      options: preset.options ? [...preset.options] : [],
+      isLocked: false
+    };
+
+    setEditingForm(prev => ({
+      ...prev,
+      fields: [...(prev.fields || []), newField]
+    }));
+  };
+
   const handleUpdateField = (fieldId, updates) => {
     setEditingForm(prev => ({
       ...prev,
@@ -565,8 +591,8 @@ export default function FormsView({
   if (viewMode === "builder" && editingForm) {
     return (
       <div className="flex flex-col gap-6 w-full pb-16 animate-fade-in">
-        {/* Top Sticky Header */}
-        <header className="bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-3xl px-6 py-4 shadow-xs flex flex-wrap items-center justify-between gap-4 sticky top-4 z-40">
+        {/* Top Header */}
+        <header className="flex flex-wrap items-center justify-between gap-4 py-1">
           {/* Left: Form Title & Meta Info */}
           <div className="flex items-center gap-3">
             <div>
@@ -575,7 +601,7 @@ export default function FormsView({
                   type="text"
                   value={editingForm.title}
                   onChange={(e) => setEditingForm(prev => ({ ...prev, title: e.target.value }))}
-                  className="text-base sm:text-lg font-bold text-slate-900 bg-transparent hover:bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 rounded-xl px-2 py-0.5 outline-none transition-all"
+                  className="text-lg sm:text-xl font-bold text-slate-900 bg-transparent hover:bg-slate-100/80 focus:bg-white focus:ring-2 focus:ring-blue-500 rounded-xl px-2.5 py-1 -ml-2.5 outline-none transition-all"
                   placeholder="Untitled Form"
                 />
                 <span className={`text-[10px] font-extrabold uppercase tracking-wide px-2.5 py-0.5 rounded-full shrink-0 ${
@@ -587,7 +613,7 @@ export default function FormsView({
                   {editingForm.type.replace(/_/g, " ")}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 font-medium px-2 mt-0.5">
+              <p className="text-[11px] text-slate-400 font-medium mt-0.5">
                 {editingForm.fields?.length || 0} Questions · {activeSubmissions.length} Submissions Received
               </p>
             </div>
@@ -666,7 +692,46 @@ export default function FormsView({
                 </p>
               </div>
 
-              {/* Grouped Field Types */}
+              {/* Pre-made Fields & Smart Suggestions */}
+              <div className="flex flex-col gap-2.5 bg-gradient-to-b from-blue-50/80 to-indigo-50/40 p-3.5 rounded-2xl border border-blue-200/80 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold uppercase text-blue-800 tracking-wider flex items-center gap-1.5">
+                    <Sparkles size={12} className="text-blue-600" />
+                    <span>Pre-Made Smart Fields</span>
+                  </span>
+                  <span className="text-[9px] font-bold text-blue-700 bg-white px-2 py-0.5 rounded-full border border-blue-200 shadow-2xs">
+                    With Dropdowns
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 gap-1.5">
+                  {PRESET_SMART_FIELDS.map(preset => {
+                    const PresetIcon = preset.icon;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => handleAppendPresetField(preset)}
+                        className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white border border-blue-100/90 hover:border-blue-400 hover:bg-blue-50/50 hover:shadow-xs text-left transition-all group cursor-pointer"
+                      >
+                        <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                          {PresetIcon && <PresetIcon size={14} />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-bold text-slate-800 group-hover:text-blue-600 truncate transition-colors">
+                            {preset.label}
+                          </div>
+                          <div className="text-[10px] text-slate-400 truncate">
+                            {preset.description}
+                          </div>
+                        </div>
+                        <Plus size={13} className="text-blue-400 group-hover:text-blue-700 transition-colors shrink-0" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Standard Grouped Field Types */}
               {["Standard", "Choices", "Feedback", "Layout"].map(cat => (
                 <div key={cat} className="flex flex-col gap-2">
                   <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">
@@ -876,6 +941,30 @@ export default function FormsView({
                             placeholder={field.type === "phone" ? "e.g. 550 12 34 56" : "e.g. Enter your details..."}
                             className="w-full px-3.5 py-1.5 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-medium text-slate-700 outline-none transition-all"
                           />
+                        </div>
+                      )}
+
+                      {/* Country Field Preview Card */}
+                      {field.type === "country" && (
+                        <div className="flex items-center gap-3 p-3 bg-blue-50/60 border border-blue-100 rounded-2xl text-xs text-blue-900 font-semibold">
+                          <Globe size={16} className="text-blue-600 shrink-0" />
+                          <span>Includes 190+ world countries with flag emojis and search autocomplete.</span>
+                        </div>
+                      )}
+
+                      {/* City Field Preview Card */}
+                      {field.type === "city" && (
+                        <div className="flex items-center gap-3 p-3 bg-indigo-50/60 border border-indigo-100 rounded-2xl text-xs text-indigo-900 font-semibold">
+                          <MapPin size={16} className="text-indigo-600 shrink-0" />
+                          <span>Dynamically populates cities based on the respondent&apos;s selected Country.</span>
+                        </div>
+                      )}
+
+                      {/* Photo / Picture Upload Preview Card */}
+                      {field.type === "picture" && (
+                        <div className="flex items-center gap-3 p-3 bg-emerald-50/60 border border-emerald-100 rounded-2xl text-xs text-emerald-900 font-semibold">
+                          <Camera size={16} className="text-emerald-600 shrink-0" />
+                          <span>Allows attendees to capture from mobile camera or upload from computer files.</span>
                         </div>
                       )}
 
@@ -1137,6 +1226,42 @@ export default function FormsView({
                               value={previewAnswers[field.id] || ""}
                               onChange={(val) => setPreviewAnswers(prev => ({ ...prev, [field.id]: val }))}
                               placeholder={field.placeholder || ""}
+                              required={field.required}
+                            />
+                          )}
+
+                          {/* Country Selector */}
+                          {field.type === "country" && (
+                            <CountrySelect
+                              value={previewAnswers[field.id] || ""}
+                              onChange={(val) => setPreviewAnswers(prev => ({ ...prev, [field.id]: val }))}
+                              placeholder={field.placeholder || "Select your country..."}
+                              required={field.required}
+                            />
+                          )}
+
+                          {/* Dynamic City Selector (linked to country) */}
+                          {field.type === "city" && (
+                            <CitySelect
+                              value={previewAnswers[field.id] || ""}
+                              country={
+                                previewAnswers["f_country"] || 
+                                previewAnswers["country"] || 
+                                Object.entries(previewAnswers).find(([k]) => k.toLowerCase().includes("country"))?.[1] || 
+                                ""
+                              }
+                              onChange={(val) => setPreviewAnswers(prev => ({ ...prev, [field.id]: val }))}
+                              placeholder={field.placeholder || "Select or enter your city..."}
+                              required={field.required}
+                            />
+                          )}
+
+                          {/* Profile Picture / Photo Upload */}
+                          {field.type === "picture" && (
+                            <FormImageUploader
+                              value={previewAnswers[field.id] || ""}
+                              onChange={(val) => setPreviewAnswers(prev => ({ ...prev, [field.id]: val }))}
+                              placeholder={field.placeholder || "Upload your photo from phone or computer"}
                               required={field.required}
                             />
                           )}

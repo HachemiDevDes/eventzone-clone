@@ -540,6 +540,7 @@ export default function MyTicketsPage({
                 <img 
                   src="https://i.imgur.com/jFDrQbM.png" 
                   alt="eventzone" 
+                  style={{ height: '20px', width: 'auto', maxWidth: '120px', objectFit: 'contain' }}
                   className="h-5 w-auto object-contain mx-auto filter brightness-0 invert opacity-90"
                 />
                 <h4 className="text-xs font-black uppercase tracking-wider mt-1 truncate">

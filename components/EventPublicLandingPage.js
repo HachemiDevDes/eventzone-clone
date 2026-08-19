@@ -14,6 +14,8 @@ import QRCode from "qrcode";
 import { useLanguage } from "../lib/i18n";
 import PublicRSVPModal from "./PublicRSVPModal";
 import CountryPhoneInput from "./CountryPhoneInput";
+import { CountrySelect, CitySelect } from "./LocationInputs";
+import FormImageUploader from "./FormImageUploader";
 
 export default function EventPublicLandingPage({
   eventId,
@@ -1100,7 +1102,7 @@ export default function EventPublicLandingPage({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 pb-12 border-b border-slate-800/80 items-start">
             <div className="lg:col-span-6 space-y-4 text-left">
               <div className="flex items-center gap-3">
-                <img src="https://i.imgur.com/jFDrQbM.png" alt="eventzone" className="h-7 w-auto object-contain brightness-0 invert" />
+                <img src="https://i.imgur.com/jFDrQbM.png" alt="eventzone" style={{ height: '28px', width: 'auto', maxWidth: '160px', objectFit: 'contain' }} className="h-7 w-auto object-contain brightness-0 invert" />
                 <span className="px-2.5 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-[10px] font-extrabold uppercase tracking-wider">
                   Official Event Portal
                 </span>
@@ -1641,6 +1643,39 @@ export default function EventPublicLandingPage({
                                   />
                                 )}
 
+                                {field.type === "country" && (
+                                  <CountrySelect
+                                    value={customAnswers[field.id] || ""}
+                                    onChange={(val) => setCustomAnswers(prev => ({ ...prev, [field.id]: val }))}
+                                    placeholder={field.placeholder || "Select your country..."}
+                                    required={field.required}
+                                  />
+                                )}
+
+                                {field.type === "city" && (
+                                  <CitySelect
+                                    value={customAnswers[field.id] || ""}
+                                    country={
+                                      customAnswers["f_country"] || 
+                                      customAnswers["country"] || 
+                                      Object.entries(customAnswers).find(([k]) => k.toLowerCase().includes("country"))?.[1] || 
+                                      ""
+                                    }
+                                    onChange={(val) => setCustomAnswers(prev => ({ ...prev, [field.id]: val }))}
+                                    placeholder={field.placeholder || "Select or enter your city..."}
+                                    required={field.required}
+                                  />
+                                )}
+
+                                {field.type === "picture" && (
+                                  <FormImageUploader
+                                    value={customAnswers[field.id] || ""}
+                                    onChange={(val) => setCustomAnswers(prev => ({ ...prev, [field.id]: val }))}
+                                    placeholder={field.placeholder || "Upload your photo from phone or computer"}
+                                    required={field.required}
+                                  />
+                                )}
+
                                 {["text", "email", "number"].includes(field.type) && field.id !== "f_core_phone" && (
                                   <input
                                     type={field.type}
@@ -1692,6 +1727,31 @@ export default function EventPublicLandingPage({
                                         <span>{opt}</span>
                                       </label>
                                     ))}
+                                  </div>
+                                )}
+
+                                {field.type === "checkbox" && (
+                                  <div className="flex flex-col gap-1.5 mt-1">
+                                    {(field.options || []).map((opt, i) => {
+                                      const currentList = Array.isArray(customAnswers[field.id]) ? customAnswers[field.id] : [];
+                                      const isChecked = currentList.includes(opt);
+                                      return (
+                                        <label key={i} className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                                          <input
+                                            type="checkbox"
+                                            checked={isChecked}
+                                            onChange={(e) => {
+                                              const updated = e.target.checked
+                                                ? [...currentList, opt]
+                                                : currentList.filter(x => x !== opt);
+                                              setCustomAnswers(prev => ({ ...prev, [field.id]: updated }));
+                                            }}
+                                            className="text-blue-600 focus:ring-blue-500 rounded h-3.5 w-3.5"
+                                          />
+                                          <span>{opt}</span>
+                                        </label>
+                                      );
+                                    })}
                                   </div>
                                 )}
 
@@ -1918,6 +1978,39 @@ export default function EventPublicLandingPage({
                           value={feedbackAnswers[field.id] || ""}
                           onChange={(val) => setFeedbackAnswers(prev => ({ ...prev, [field.id]: val }))}
                           placeholder={field.placeholder || ""}
+                          required={field.required}
+                        />
+                      )}
+
+                      {field.type === "country" && (
+                        <CountrySelect
+                          value={feedbackAnswers[field.id] || ""}
+                          onChange={(val) => setFeedbackAnswers(prev => ({ ...prev, [field.id]: val }))}
+                          placeholder={field.placeholder || "Select your country..."}
+                          required={field.required}
+                        />
+                      )}
+
+                      {field.type === "city" && (
+                        <CitySelect
+                          value={feedbackAnswers[field.id] || ""}
+                          country={
+                            feedbackAnswers["f_country"] || 
+                            feedbackAnswers["country"] || 
+                            Object.entries(feedbackAnswers).find(([k]) => k.toLowerCase().includes("country"))?.[1] || 
+                            ""
+                          }
+                          onChange={(val) => setFeedbackAnswers(prev => ({ ...prev, [field.id]: val }))}
+                          placeholder={field.placeholder || "Select or enter your city..."}
+                          required={field.required}
+                        />
+                      )}
+
+                      {field.type === "picture" && (
+                        <FormImageUploader
+                          value={feedbackAnswers[field.id] || ""}
+                          onChange={(val) => setFeedbackAnswers(prev => ({ ...prev, [field.id]: val }))}
+                          placeholder={field.placeholder || "Upload your photo from phone or computer"}
                           required={field.required}
                         />
                       )}

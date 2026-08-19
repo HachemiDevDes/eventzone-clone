@@ -281,7 +281,7 @@ export default function EventCreationWizard({ onCancel, onEventCreated, userId, 
             className="cursor-pointer select-none flex items-center gap-2"
             title="Return to Events"
           >
-            <img src="https://i.imgur.com/jFDrQbM.png" alt="eventzone" className="h-7 w-auto object-contain" />
+            <img src="https://i.imgur.com/jFDrQbM.png" alt="eventzone" style={{ height: '28px', width: 'auto', maxWidth: '160px', objectFit: 'contain' }} className="h-7 w-auto object-contain" />
           </div>
 
           <div className="h-5 w-px bg-slate-200" />
