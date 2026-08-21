@@ -7,7 +7,7 @@ import {
   Calendar, Upload, Plus, BarChart4, Pencil, Mail, FileText,
   Printer, QrCode, Layers, Archive, RotateCcw,
   Eye, Phone, Clock, CheckCircle2, XCircle, Sparkles, Filter, Info, ShieldCheck, ArrowUpRight,
-  Maximize2, User, Download
+  Maximize2, User, Download, Camera, Loader2
 } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
 import { logCommunication, fetchCommunications } from "../lib/db";
@@ -35,7 +35,7 @@ export default function GenericTableView({
     case "exhibitors":
       return <ExhibitorsView state={state} onUpdateState={onUpdateState} onOpenModal={onOpenModal} />;
     case "speakers":
-      return <SpeakersDirectoryView state={state} onUpdateState={onUpdateState} />;
+      return <SpeakersDirectoryView state={state} onUpdateState={onUpdateState} onUploadFile={onUploadFile} />;
     case "tickets":
       return <TicketsView state={state} onUpdateState={onUpdateState} onOpenModal={onOpenModal} onSwitchView={onSwitchView} />;
     case "check-in":
@@ -1744,10 +1744,15 @@ function ExhibitorsView({ state, onUpdateState, onOpenModal }) {
 }
 
 // 7. SPEAKERS DIRECTORY VIEW
-function SpeakersDirectoryView({ state, onUpdateState }) {
+function SpeakersDirectoryView({ state, onUpdateState, onUploadFile }) {
   const { sessions, attendees = [] } = state;
   const [selectedAttendeeId, setSelectedAttendeeId] = useState("");
   const [selectedSessionId, setSelectedSessionId] = useState("");
+  const [speakerMode, setSpeakerMode] = useState("attendee"); // "attendee" | "custom"
+  const [customName, setCustomName] = useState("");
+  const [customRole, setCustomRole] = useState("speaker");
+  const [speakerImg, setSpeakerImg] = useState("");
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
 
   // Extract unique speakers/moderators dynamically from sessions + attendees marked as speaker
@@ -1761,7 +1766,10 @@ function SpeakersDirectoryView({ state, onUpdateState }) {
         directory.push({ name: s.name, image: s.image, role: "speaker", sessionsCount: 1 });
       } else {
         const match = directory.find(x => x.name === s.name);
-        if (match) match.sessionsCount++;
+        if (match) {
+          match.sessionsCount++;
+          if (!match.image && s.image) match.image = s.image;
+        }
       }
     });
 
@@ -1771,7 +1779,10 @@ function SpeakersDirectoryView({ state, onUpdateState }) {
         directory.push({ name: m.name, image: m.image, role: "moderator", sessionsCount: 1 });
       } else {
         const match = directory.find(x => x.name === m.name);
-        if (match) match.sessionsCount++;
+        if (match) {
+          match.sessionsCount++;
+          if (!match.image && m.image) match.image = m.image;
+        }
       }
     });
   });
@@ -1784,52 +1795,171 @@ function SpeakersDirectoryView({ state, onUpdateState }) {
     }
   });
 
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingPhoto(true);
+    try {
+      let publicUrl = null;
+      if (onUploadFile) {
+        publicUrl = await onUploadFile(file, 'floor-plans');
+      }
+      if (!publicUrl) {
+        publicUrl = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(file);
+        });
+      }
+      if (publicUrl) setSpeakerImg(publicUrl);
+    } catch (err) {
+      console.warn("Storage upload notice, using local fallback:", err);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (reader.result) setSpeakerImg(reader.result);
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsUploadingPhoto(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleCardPhotoReplace = async (personName, e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      let publicUrl = null;
+      if (onUploadFile) {
+        publicUrl = await onUploadFile(file, 'floor-plans');
+      }
+      if (!publicUrl) {
+        publicUrl = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(file);
+        });
+      }
+
+      if (publicUrl) {
+        // 1. Update all sessions containing this speaker/moderator
+        const updatedSessions = sessions.map(s => {
+          let mod = false;
+          const newSpeakers = (s.speakers || []).map(sp => {
+            if (sp.name === personName) {
+              mod = true;
+              return { ...sp, image: publicUrl };
+            }
+            return sp;
+          });
+          const newModerators = (s.moderators || []).map(m => {
+            if (m.name === personName) {
+              mod = true;
+              return { ...m, image: publicUrl };
+            }
+            return m;
+          });
+          return mod ? { ...s, speakers: newSpeakers, moderators: newModerators } : s;
+        });
+        onUpdateState("sessions", updatedSessions);
+
+        // 2. Update attendee if exists
+        const updatedAttendees = attendees.map(a => a.name === personName ? { ...a, image: publicUrl } : a);
+        onUpdateState("attendees", updatedAttendees);
+      }
+    } catch (err) {
+      console.error("Card photo replace error:", err);
+    } finally {
+      e.target.value = "";
+    }
+  };
+
   const handleAddSpeakerSubmit = (e) => {
     e.preventDefault();
-    if (!selectedAttendeeId) {
-      alert("Please select an attendee.");
-      return;
-    }
 
-    const attendee = attendees.find(a => String(a.id) === selectedAttendeeId);
-    if (!attendee) return;
+    let targetName = "";
+    let targetImage = speakerImg;
+
+    if (speakerMode === "attendee") {
+      if (!selectedAttendeeId) {
+        alert("Please select an attendee.");
+        return;
+      }
+      const attendee = attendees.find(a => String(a.id) === selectedAttendeeId);
+      if (!attendee) return;
+      targetName = attendee.name;
+      targetImage = targetImage || attendee.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(attendee.name)}&background=2563eb&color=fff`;
+    } else {
+      if (!customName.trim()) {
+        alert("Please enter a speaker name.");
+        return;
+      }
+      targetName = customName.trim();
+      targetImage = targetImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(targetName)}&background=2563eb&color=fff`;
+    }
 
     // 1. If a session is chosen, assign to it
     if (selectedSessionId) {
       const session = sessions.find(s => String(s.id) === selectedSessionId);
       if (session) {
-        const updatedSpeakers = [...(session.speakers || [])];
-        if (!updatedSpeakers.find(sp => sp.name === attendee.name)) {
-          updatedSpeakers.push({
+        const isMod = customRole === "moderator";
+        const targetListKey = isMod ? "moderators" : "speakers";
+        const currentList = [...(session[targetListKey] || [])];
+
+        if (!currentList.find(p => p.name.toLowerCase() === targetName.toLowerCase())) {
+          currentList.push({
             id: Date.now(),
-            name: attendee.name,
-            image: attendee.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(attendee.name)}&background=random`
+            name: targetName,
+            image: targetImage
           });
 
-          const updatedSessions = sessions.map(s => String(s.id) === selectedSessionId ? { ...s, speakers: updatedSpeakers } : s);
+          const updatedSessions = sessions.map(s => String(s.id) === selectedSessionId ? { ...s, [targetListKey]: currentList } : s);
           onUpdateState("sessions", updatedSessions);
-          
-          // Also mark attendee isSpeaker globally
-          const updatedAttendees = attendees.map(a => String(a.id) === selectedAttendeeId ? { ...a, isSpeaker: true } : a);
-          onUpdateState("attendees", updatedAttendees);
 
-          alert(`Successfully added ${attendee.name} as a speaker to "${session.title}"!`);
-          setShowAddForm(false);
-          setSelectedAttendeeId("");
-          setSelectedSessionId("");
+          if (speakerMode === "attendee") {
+            const updatedAttendees = attendees.map(a => String(a.id) === selectedAttendeeId ? { ...a, isSpeaker: true, image: targetImage || a.image } : a);
+            onUpdateState("attendees", updatedAttendees);
+          }
+
+          alert(`Successfully added ${targetName} as ${isMod ? 'a moderator' : 'a speaker'} to "${session.title}"!`);
+          resetForm();
         } else {
-          alert(`${attendee.name} is already a speaker in this session.`);
+          alert(`${targetName} is already added in this session.`);
         }
       }
     } else {
-      // 2. No session chosen, mark attendee as speaker globally
-      const updatedAttendees = attendees.map(a => String(a.id) === selectedAttendeeId ? { ...a, isSpeaker: true } : a);
-      onUpdateState("attendees", updatedAttendees);
-      alert(`Successfully added ${attendee.name} to the Speakers Directory!`);
-      setShowAddForm(false);
-      setSelectedAttendeeId("");
-      setSelectedSessionId("");
+      // 2. Global directory
+      if (speakerMode === "attendee") {
+        const updatedAttendees = attendees.map(a => String(a.id) === selectedAttendeeId ? { ...a, isSpeaker: true, image: targetImage || a.image } : a);
+        onUpdateState("attendees", updatedAttendees);
+      } else {
+        // Create an entry in attendees or first session
+        const newAttendee = {
+          id: `spk-${Date.now()}`,
+          name: targetName,
+          email: `${targetName.toLowerCase().replace(/\s+/g, '.')}@speaker.event`,
+          ticketType: "Speaker",
+          isSpeaker: true,
+          image: targetImage,
+          status: "Confirmed"
+        };
+        onUpdateState("attendees", [newAttendee, ...attendees]);
+      }
+      alert(`Successfully added ${targetName} to the Speakers Directory!`);
+      resetForm();
     }
+  };
+
+  const resetForm = () => {
+    setShowAddForm(false);
+    setSelectedAttendeeId("");
+    setSelectedSessionId("");
+    setCustomName("");
+    setSpeakerImg("");
   };
 
   return (
@@ -1848,51 +1978,132 @@ function SpeakersDirectoryView({ state, onUpdateState }) {
       </header>
 
       {showAddForm && (
-        <div className="bg-white border border-indigo-150 p-6 rounded-3xl shadow-sm mb-6 flex flex-col gap-4">
-          <h3 className="text-sm font-bold text-slate-800">Add Expert to Speakers Directory</h3>
-          <form onSubmit={handleAddSpeakerSubmit} className="flex flex-col sm:flex-row gap-3 items-end">
-            <div className="flex flex-col gap-1 flex-1 w-full">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">1. Select Registered Attendee</label>
-              <select
-                value={selectedAttendeeId}
-                onChange={(e) => setSelectedAttendeeId(e.target.value)}
-                className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none bg-white"
-                required
+        <div className="bg-white border border-indigo-150 p-6 rounded-3xl shadow-sm mb-6 flex flex-col gap-4 animate-fade-in">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 className="text-sm font-bold text-slate-800">Add Expert to Speakers Directory</h3>
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setSpeakerMode("attendee")}
+                className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  speakerMode === "attendee" ? "bg-white text-indigo-700 shadow-2xs" : "text-slate-500 hover:text-slate-800"
+                }`}
               >
-                <option value="">-- Choose Attendee --</option>
-                {attendees.map(a => (
-                  <option key={a.id} value={a.id}>{a.name} ({a.email})</option>
-                ))}
-              </select>
+                From Attendees
+              </button>
+              <button
+                type="button"
+                onClick={() => setSpeakerMode("custom")}
+                className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  speakerMode === "custom" ? "bg-white text-indigo-700 shadow-2xs" : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                New Speaker
+              </button>
+            </div>
+          </div>
+
+          <form onSubmit={handleAddSpeakerSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+            {speakerMode === "attendee" ? (
+              <div className="flex flex-col gap-1 w-full">
+                <label className="text-[10px] font-bold text-slate-400 uppercase">1. Select Registered Attendee</label>
+                <select
+                  value={selectedAttendeeId}
+                  onChange={(e) => setSelectedAttendeeId(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none bg-white"
+                  required
+                >
+                  <option value="">-- Choose Attendee --</option>
+                  {attendees.map(a => (
+                    <option key={a.id} value={a.id}>{a.name} ({a.email})</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1 w-full">
+                <label className="text-[10px] font-bold text-slate-400 uppercase">1. Speaker Full Name</label>
+                <input
+                  type="text"
+                  value={customName}
+                  onChange={(e) => setCustomName(e.target.value)}
+                  placeholder="e.g. Dr. Alex Vance"
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none bg-white"
+                  required
+                />
+              </div>
+            )}
+
+            {/* Photo Upload */}
+            <div className="flex flex-col gap-1 w-full">
+              <label className="text-[10px] font-bold text-slate-400 uppercase">2. Photo (Optional)</label>
+              <div className="flex items-center gap-2">
+                <label className={`flex-1 px-3 py-2.5 rounded-xl border text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 truncate ${
+                  speakerImg ? "border-indigo-300 bg-indigo-50 text-indigo-700" : "border-slate-200 bg-white hover:bg-slate-50 text-slate-600"
+                }`}>
+                  {isUploadingPhoto ? (
+                    <Loader2 size={13} className="animate-spin text-indigo-600" />
+                  ) : speakerImg ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={speakerImg} className="w-4 h-4 rounded-full object-cover border border-indigo-200" alt="" />
+                  ) : (
+                    <Camera size={13} />
+                  )}
+                  <span>{isUploadingPhoto ? "Uploading..." : speakerImg ? "Photo Attached" : "Upload Photo"}</span>
+                  <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                </label>
+                {speakerImg && (
+                  <button
+                    type="button"
+                    onClick={() => setSpeakerImg("")}
+                    className="p-2 text-rose-500 hover:text-rose-700 rounded-xl border border-slate-200 hover:bg-rose-50 cursor-pointer"
+                    title="Clear photo"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
             </div>
 
-            <div className="flex flex-col gap-1 flex-1 w-full">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">2. Assign to Session (Optional)</label>
-              <select
-                value={selectedSessionId}
-                onChange={(e) => setSelectedSessionId(e.target.value)}
-                className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none bg-white"
-              >
-                <option value="">-- None (Add Globally) --</option>
-                {sessions.map(s => (
-                  <option key={s.id} value={s.id}>{s.title} ({s.date || "Day 1"})</option>
-                ))}
-              </select>
+            {/* Role & Session */}
+            <div className="flex flex-col gap-1 w-full">
+              <label className="text-[10px] font-bold text-slate-400 uppercase">3. Role &amp; Session</label>
+              <div className="flex gap-1.5">
+                <select
+                  value={customRole}
+                  onChange={(e) => setCustomRole(e.target.value)}
+                  className="px-2 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none bg-white w-28 shrink-0"
+                >
+                  <option value="speaker">Speaker</option>
+                  <option value="moderator">Moderator</option>
+                </select>
+                <select
+                  value={selectedSessionId}
+                  onChange={(e) => setSelectedSessionId(e.target.value)}
+                  className="flex-1 px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none bg-white min-w-0"
+                >
+                  <option value="">-- None (Global) --</option>
+                  {sessions.map(s => (
+                    <option key={s.id} value={s.id}>{s.title}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
-            <button
-              type="submit"
-              className="bg-indigo-650 hover:bg-indigo-750 text-white font-bold py-2.5 px-5 rounded-xl text-xs shrink-0 cursor-pointer shadow-sm"
-            >
-              Confirm Speaker
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowAddForm(false)}
-              className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2.5 px-4 rounded-xl text-xs shrink-0 cursor-pointer"
-            >
-              Cancel
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                className="flex-1 bg-indigo-650 hover:bg-indigo-750 text-white font-bold py-2.5 px-4 rounded-xl text-xs cursor-pointer shadow-sm text-center"
+              >
+                Confirm Speaker
+              </button>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2.5 px-3 rounded-xl text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
           </form>
         </div>
       )}
@@ -1904,23 +2115,46 @@ function SpeakersDirectoryView({ state, onUpdateState }) {
           </div>
         ) : (
           directory.map((person, idx) => (
-            <div key={idx} className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col items-center text-center gap-4 hover:shadow-md hover:border-indigo-150 transition-all duration-200">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={person.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(person.name)}&background=random`}
-                className="w-20 h-20 rounded-full object-cover shadow-sm border-2 border-indigo-50"
-                alt={person.name}
-              />
+            <div key={idx} className="group bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col items-center text-center gap-4 hover:shadow-md hover:border-indigo-150 transition-all duration-200 relative">
+              {/* Clickable Avatar to Replace Photo on the Fly */}
+              <label className="relative cursor-pointer" title="Click to upload / change photo">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={person.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(person.name)}&background=random`}
+                  className="w-20 h-20 rounded-full object-cover shadow-sm border-2 border-indigo-50 group-hover:border-indigo-300 transition-colors"
+                  alt={person.name}
+                />
+                <span className="absolute inset-0 bg-black/45 rounded-full flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Camera size={18} />
+                  <span className="text-[9px] font-bold mt-0.5">Change</span>
+                </span>
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  onChange={(e) => handleCardPhotoReplace(person.name, e)} 
+                  className="hidden" 
+                />
+              </label>
+
               <div className="flex flex-col gap-1 w-full">
                 <h3 className="text-sm font-bold text-slate-850 truncate">{person.name}</h3>
                 <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full w-fit mx-auto ${person.role === "moderator" ? "bg-amber-50 text-amber-700 border border-amber-200" : "bg-indigo-50 text-indigo-700 border border-indigo-100"}`}>
                   {person.role}
                 </span>
               </div>
-              <div className="border-t border-slate-100 w-full pt-3 mt-auto">
-                <span className="text-[11px] font-semibold text-slate-400">
+              <div className="border-t border-slate-100 w-full pt-3 mt-auto flex items-center justify-between text-slate-400">
+                <span className="text-[11px] font-semibold">
                   {person.sessionsCount > 0 ? `${person.sessionsCount} session${person.sessionsCount > 1 ? 's' : ''}` : "Directory Speaker"}
                 </span>
+                <label className="text-[10px] font-bold text-indigo-650 hover:text-indigo-800 cursor-pointer">
+                  Edit Photo
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={(e) => handleCardPhotoReplace(person.name, e)} 
+                    className="hidden" 
+                  />
+                </label>
               </div>
             </div>
           ))

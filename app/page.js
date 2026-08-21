@@ -1846,7 +1846,7 @@ export function HomeContent() {
               >
                 <div className="flex items-center gap-2.5">
                   <Users2 size={15} className={`shrink-0 ${["attendees", "pending", "organizations", "sponsors", "exhibitors", "speakers"].includes(currentView) ? "text-blue-600" : "text-slate-400 group-hover:text-blue-600"}`} />
-                  <span>{t("dash.attendees", "All Attendees")}</span>
+                  <span>{t("dash.participants", "Participants")}</span>
                 </div>
                 <ChevronDown size={11} className={`text-slate-400 transition-transform ${participantsOpen ? "rotate-180" : ""}`} />
               </button>

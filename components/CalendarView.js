@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Calendar, Archive, RotateCcw } from "lucide-react";
+import { Calendar, Archive, RotateCcw, Camera, Upload, Check, Loader2, X } from "lucide-react";
 import CustomDatePicker from "./CustomDatePicker";
 import CustomTimePicker from "./CustomTimePicker";
 import { generateUuid } from "../lib/db";
@@ -28,15 +28,18 @@ export default function CalendarView({
   const [speakerName, setSpeakerName] = useState("");
   const [speakerImg, setSpeakerImg] = useState("");
   const [speakersList, setSpeakersList] = useState([]);
+  const [isUploadingSpeaker, setIsUploadingSpeaker] = useState(false);
   
   const [moderatorName, setModeratorName] = useState("");
   const [moderatorImg, setModeratorImg] = useState("");
   const [moderatorsList, setModeratorsList] = useState([]);
+  const [isUploadingModerator, setIsUploadingModerator] = useState(false);
 
   // Logo input states
   const [logoLabel, setLogoLabel] = useState("");
   const [logoImg, setLogoImg] = useState("");
   const [logosList, setLogosList] = useState([]);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
   // Sidebar Resizing state
   const [sidebarWidth, setSidebarWidth] = useState(420);
@@ -85,17 +88,26 @@ export default function CalendarView({
 
   // Base64 file converter or storage uploader
   const handleImageUpload = async (e, type) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
 
+    if (type === "speaker") setIsUploadingSpeaker(true);
+    else if (type === "moderator") setIsUploadingModerator(true);
+    else if (type === "logo") setIsUploadingLogo(true);
+
     try {
-      const publicUrl = onUploadFile 
-        ? await onUploadFile(file, 'floor-plans')
-        : await new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
-            reader.readAsDataURL(file);
-          });
+      let publicUrl = null;
+      if (onUploadFile) {
+        publicUrl = await onUploadFile(file, 'floor-plans');
+      }
+      if (!publicUrl) {
+        publicUrl = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(file);
+        });
+      }
 
       if (publicUrl) {
         if (type === "speaker") {
@@ -107,8 +119,65 @@ export default function CalendarView({
         }
       }
     } catch (err) {
-      console.error("Failed to upload image:", err);
-      alert("Failed to upload image");
+      console.warn("Storage upload notice, converting to local preview:", err);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (reader.result) {
+          if (type === "speaker") setSpeakerImg(reader.result);
+          else if (type === "moderator") setModeratorImg(reader.result);
+          else if (type === "logo") setLogoImg(reader.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      if (type === "speaker") setIsUploadingSpeaker(false);
+      else if (type === "moderator") setIsUploadingModerator(false);
+      else if (type === "logo") setIsUploadingLogo(false);
+      e.target.value = "";
+    }
+  };
+
+  // Inline Photo Update for existing speaker / moderator in the list
+  const handleUpdateExistingPersonPhoto = async (id, type, e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      let publicUrl = null;
+      if (onUploadFile) {
+        publicUrl = await onUploadFile(file, 'floor-plans');
+      }
+      if (!publicUrl) {
+        publicUrl = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(file);
+        });
+      }
+
+      if (publicUrl) {
+        if (type === "speaker") {
+          setSpeakersList(prev => prev.map(s => s.id === id ? { ...s, image: publicUrl } : s));
+        } else {
+          setModeratorsList(prev => prev.map(m => m.id === id ? { ...m, image: publicUrl } : m));
+        }
+      }
+    } catch (err) {
+      console.warn("Photo replacement error, using local fallback:", err);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (reader.result) {
+          if (type === "speaker") {
+            setSpeakersList(prev => prev.map(s => s.id === id ? { ...s, image: reader.result } : s));
+          } else {
+            setModeratorsList(prev => prev.map(m => m.id === id ? { ...m, image: reader.result } : m));
+          }
+        }
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      e.target.value = "";
     }
   };
 
@@ -118,8 +187,8 @@ export default function CalendarView({
       if (!speakerName.trim()) return;
       const newSpeaker = {
         id: Date.now(),
-        name: speakerName,
-        image: speakerImg || `https://ui-avatars.com/api/?name=${encodeURIComponent(speakerName)}&background=2563eb&color=fff`
+        name: speakerName.trim(),
+        image: speakerImg || `https://ui-avatars.com/api/?name=${encodeURIComponent(speakerName.trim())}&background=2563eb&color=fff`
       };
       setSpeakersList([...speakersList, newSpeaker]);
       setSpeakerName("");
@@ -128,8 +197,8 @@ export default function CalendarView({
       if (!moderatorName.trim()) return;
       const newModerator = {
         id: Date.now(),
-        name: moderatorName,
-        image: moderatorImg || `https://ui-avatars.com/api/?name=${encodeURIComponent(moderatorName)}&background=4f46e5&color=fff`
+        name: moderatorName.trim(),
+        image: moderatorImg || `https://ui-avatars.com/api/?name=${encodeURIComponent(moderatorName.trim())}&background=4f46e5&color=fff`
       };
       setModeratorsList([...moderatorsList, newModerator]);
       setModeratorName("");
@@ -380,10 +449,21 @@ export default function CalendarView({
 
           {/* Speakers */}
           <div className="flex flex-col gap-2 pt-1 border-t border-slate-100">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              Speakers
-            </label>
-            <div className="flex gap-2">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Speakers
+              </label>
+              {speakerImg && (
+                <button
+                  type="button"
+                  onClick={() => setSpeakerImg("")}
+                  className="text-[10px] text-rose-500 hover:text-rose-700 font-semibold cursor-pointer"
+                >
+                  Clear Photo
+                </button>
+              )}
+            </div>
+            <div className="flex gap-2 items-center">
               <input 
                 type="text" 
                 value={speakerName}
@@ -391,8 +471,20 @@ export default function CalendarView({
                 placeholder="Speaker Name"
                 className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-blue-600"
               />
-              <label className="px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-xs font-bold cursor-pointer transition-colors shrink-0">
-                Photo
+              <label className={`px-3 py-2 rounded-xl border text-xs font-bold cursor-pointer transition-all shrink-0 flex items-center gap-1.5 ${
+                speakerImg 
+                  ? "border-blue-300 bg-blue-50 text-blue-700 ring-2 ring-blue-100" 
+                  : "border-slate-200 bg-white hover:bg-slate-50 text-slate-600"
+              }`}>
+                {isUploadingSpeaker ? (
+                  <Loader2 size={13} className="animate-spin text-blue-600" />
+                ) : speakerImg ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={speakerImg} className="w-4 h-4 rounded-full object-cover border border-blue-200" alt="Preview" />
+                ) : (
+                  <Camera size={13} />
+                )}
+                <span>{isUploadingSpeaker ? "Uploading..." : speakerImg ? "Photo Attached" : "Photo"}</span>
                 <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, "speaker")} className="hidden" />
               </label>
               <button 
@@ -407,11 +499,23 @@ export default function CalendarView({
             {speakersList.length > 0 && (
               <div className="flex flex-wrap gap-1.5 pt-1">
                 {speakersList.map(s => (
-                  <div key={s.id} className="flex items-center gap-1.5 pl-1 pr-2 py-1 bg-slate-50 border border-slate-200 rounded-full text-[11px] font-bold text-slate-700">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={s.image} className="w-4 h-4 rounded-full object-cover" alt="" />
-                    <span className="truncate max-w-[100px]">{s.name}</span>
-                    <button type="button" onClick={() => removePerson(s.id, "speaker")} className="text-slate-400 hover:text-rose-600 font-bold ml-0.5 cursor-pointer">×</button>
+                  <div key={s.id} className="group relative flex items-center gap-1.5 pl-1 pr-2 py-1 bg-slate-50 hover:bg-blue-50/60 border border-slate-200 hover:border-blue-200 rounded-full text-[11px] font-bold text-slate-700 transition-colors">
+                    {/* Clickable Avatar to Replace Photo */}
+                    <label className="relative cursor-pointer" title="Click to change photo">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={s.image} className="w-5 h-5 rounded-full object-cover border border-slate-200 group-hover:border-blue-400 transition-colors" alt="" />
+                      <span className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Camera size={9} className="text-white" />
+                      </span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={(e) => handleUpdateExistingPersonPhoto(s.id, "speaker", e)} 
+                        className="hidden" 
+                      />
+                    </label>
+                    <span className="truncate max-w-[110px]">{s.name}</span>
+                    <button type="button" onClick={() => removePerson(s.id, "speaker")} className="text-slate-400 hover:text-rose-600 font-bold ml-0.5 cursor-pointer" title="Remove speaker">×</button>
                   </div>
                 ))}
               </div>
@@ -420,10 +524,21 @@ export default function CalendarView({
 
           {/* Moderators */}
           <div className="flex flex-col gap-2 pt-1 border-t border-slate-100">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              Moderators
-            </label>
-            <div className="flex gap-2">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Moderators
+              </label>
+              {moderatorImg && (
+                <button
+                  type="button"
+                  onClick={() => setModeratorImg("")}
+                  className="text-[10px] text-rose-500 hover:text-rose-700 font-semibold cursor-pointer"
+                >
+                  Clear Photo
+                </button>
+              )}
+            </div>
+            <div className="flex gap-2 items-center">
               <input 
                 type="text" 
                 value={moderatorName}
@@ -431,8 +546,20 @@ export default function CalendarView({
                 placeholder="Moderator Name"
                 className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-blue-600"
               />
-              <label className="px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-xs font-bold cursor-pointer transition-colors shrink-0">
-                Photo
+              <label className={`px-3 py-2 rounded-xl border text-xs font-bold cursor-pointer transition-all shrink-0 flex items-center gap-1.5 ${
+                moderatorImg 
+                  ? "border-indigo-300 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-100" 
+                  : "border-slate-200 bg-white hover:bg-slate-50 text-slate-600"
+              }`}>
+                {isUploadingModerator ? (
+                  <Loader2 size={13} className="animate-spin text-indigo-600" />
+                ) : moderatorImg ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={moderatorImg} className="w-4 h-4 rounded-full object-cover border border-indigo-200" alt="Preview" />
+                ) : (
+                  <Camera size={13} />
+                )}
+                <span>{isUploadingModerator ? "Uploading..." : moderatorImg ? "Photo Attached" : "Photo"}</span>
                 <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, "moderator")} className="hidden" />
               </label>
               <button 
@@ -447,11 +574,22 @@ export default function CalendarView({
             {moderatorsList.length > 0 && (
               <div className="flex flex-wrap gap-1.5 pt-1">
                 {moderatorsList.map(m => (
-                  <div key={m.id} className="flex items-center gap-1.5 pl-1 pr-2 py-1 bg-slate-50 border border-slate-200 rounded-full text-[11px] font-bold text-slate-700">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={m.image} className="w-4 h-4 rounded-full object-cover" alt="" />
-                    <span className="truncate max-w-[100px]">{m.name}</span>
-                    <button type="button" onClick={() => removePerson(m.id, "moderator")} className="text-slate-400 hover:text-rose-600 font-bold ml-0.5 cursor-pointer">×</button>
+                  <div key={m.id} className="group relative flex items-center gap-1.5 pl-1 pr-2 py-1 bg-slate-50 hover:bg-indigo-50/60 border border-slate-200 hover:border-indigo-200 rounded-full text-[11px] font-bold text-slate-700 transition-colors">
+                    <label className="relative cursor-pointer" title="Click to change photo">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={m.image} className="w-5 h-5 rounded-full object-cover border border-slate-200 group-hover:border-indigo-400 transition-colors" alt="" />
+                      <span className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Camera size={9} className="text-white" />
+                      </span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={(e) => handleUpdateExistingPersonPhoto(m.id, "moderator", e)} 
+                        className="hidden" 
+                      />
+                    </label>
+                    <span className="truncate max-w-[110px]">{m.name}</span>
+                    <button type="button" onClick={() => removePerson(m.id, "moderator")} className="text-slate-400 hover:text-rose-600 font-bold ml-0.5 cursor-pointer" title="Remove moderator">×</button>
                   </div>
                 ))}
               </div>
@@ -473,8 +611,18 @@ export default function CalendarView({
               />
 
               <div className="flex items-center gap-2">
-                <label className="flex-1 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-xs font-bold cursor-pointer transition-colors text-center truncate">
-                  {logoImg ? "Logo Selected" : "Upload Logo Image"}
+                <label className={`flex-1 px-3 py-2 rounded-xl border text-xs font-bold cursor-pointer transition-all text-center truncate flex items-center justify-center gap-1.5 ${
+                  logoImg ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white hover:bg-slate-50 text-slate-600"
+                }`}>
+                  {isUploadingLogo ? (
+                    <Loader2 size={13} className="animate-spin text-blue-600" />
+                  ) : logoImg ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={logoImg} className="h-4 w-auto object-contain max-w-[50px]" alt="" />
+                  ) : (
+                    <Upload size={13} />
+                  )}
+                  <span>{isUploadingLogo ? "Uploading..." : logoImg ? "Logo Attached" : "Upload Logo Image"}</span>
                   <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, "logo")} className="hidden" />
                 </label>
 
