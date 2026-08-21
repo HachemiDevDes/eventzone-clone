@@ -7,7 +7,7 @@ import {
   CheckCircle2, Lock, Mail, User, ShieldCheck, 
   KeyRound, AlertCircle, ArrowLeft, Zap, Eye, EyeOff, Globe, ChevronDown, Check
 } from "lucide-react";
-import { supabase } from "../lib/supabase";
+import { supabase, safeLocalStorageSet, sanitizeUserForStorage } from "../lib/supabase";
 import { useLanguage } from "../lib/i18n";
 
 export default function AuthView({ 
@@ -44,16 +44,14 @@ export default function AuthView({
       id: role === "organizer" ? "demo-organizer-01" : "demo-visitor-01",
       email: role === "organizer" ? "organizer@eventzone.io" : "visitor@eventzone.io",
       fullName: role === "organizer" ? "Hachemi (Organizer)" : "Sarah Visitor",
-      role: role,
+      role: role === "attendee" ? "visitor" : role,
       companyName: role === "organizer" ? "Eventzone Platforms" : "Innovation Labs",
       jobTitle: role === "organizer" ? "Event Director" : "Senior Delegate",
       avatar: role === "organizer" 
         ? "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80"
         : "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80",
     };
-    if (typeof window !== "undefined") {
-      localStorage.setItem("eventzone_user", JSON.stringify(demoUser));
-    }
+    safeLocalStorageSet("eventzone_user", sanitizeUserForStorage(demoUser));
     onAuthSuccess(demoUser);
   };
 
@@ -146,11 +144,12 @@ export default function AuthView({
         const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=0b5cdb&color=fff`;
 
         // 2. Create / Upsert Profile in 'public.profiles'
+        const dbRole = selectedRole === "visitor" || selectedRole === "attendee" ? "attendee" : "organizer";
         const profilePayload = {
           id: userId,
           email: email.trim(),
           full_name: fullName.trim(),
-          role: selectedRole,
+          role: dbRole,
           avatar_url: avatarUrl,
           onboarding_completed: true,
           created_at: new Date().toISOString(),
@@ -165,13 +164,14 @@ export default function AuthView({
 
         // 3. Handle Email Confirmation if required
         if (authData?.session === null && authUser && !authUser.confirmed_at) {
-          setTempUser({
+          const tempUserData = {
             id: userId,
-            email: email,
-            fullName: fullName,
-            role: selectedRole,
+            email: email.trim(),
+            fullName: fullName.trim(),
+            role: selectedRole === "attendee" ? "visitor" : selectedRole,
             avatar: avatarUrl,
-          });
+          };
+          setTempUser(tempUserData);
           setAuthMode("check-email");
           setLoading(false);
           return;
@@ -182,13 +182,11 @@ export default function AuthView({
           id: userId,
           email: email.trim(),
           fullName: fullName.trim(),
-          role: selectedRole,
+          role: selectedRole === "attendee" ? "visitor" : selectedRole,
           avatar: avatarUrl,
         };
 
-        if (typeof window !== "undefined") {
-          localStorage.setItem("eventzone_user", JSON.stringify(createdUser));
-        }
+        safeLocalStorageSet("eventzone_user", sanitizeUserForStorage(createdUser));
         onAuthSuccess(createdUser);
 
       } else {
@@ -213,22 +211,22 @@ export default function AuthView({
               .from("profiles")
               .select("*")
               .eq("id", userId)
-              .single();
+              .maybeSingle();
             userProfile = prof;
           } catch (e) {
             console.warn("Fetch profile warning:", e);
           }
         }
 
-        const retrievedName = userProfile?.full_name || authUser?.user_metadata?.full_name || email.split("@")[0] || "Eventzone User";
+        const retrievedName = userProfile?.full_name || authUser?.user_metadata?.full_name || authUser?.user_metadata?.name || email.split("@")[0] || "Eventzone User";
         const retrievedRole = userProfile?.role || authUser?.user_metadata?.role || "organizer";
-        const retrievedAvatar = userProfile?.avatar_url || authUser?.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(retrievedName)}&background=0b5cdb&color=fff`;
+        const retrievedAvatar = userProfile?.avatar_url || authUser?.user_metadata?.avatar_url || authUser?.user_metadata?.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(retrievedName)}&background=0b5cdb&color=fff`;
 
         const signedInUser = {
           id: userId || `user-${Date.now()}`,
           email: email.trim(),
           fullName: retrievedName,
-          role: retrievedRole === "attendee" ? "visitor" : retrievedRole,
+          role: retrievedRole === "attendee" || retrievedRole === "visitor" ? "visitor" : "organizer",
           companyName: userProfile?.company_name || "",
           jobTitle: userProfile?.job_title || "",
           phone: userProfile?.phone || "",
@@ -239,11 +237,12 @@ export default function AuthView({
         // Ensure profile exists in DB
         if (userId && !userProfile) {
           try {
+            const dbRole = retrievedRole === "attendee" || retrievedRole === "visitor" ? "attendee" : "organizer";
             await supabase.from("profiles").upsert({
               id: userId,
               email: email.trim(),
               full_name: retrievedName,
-              role: retrievedRole,
+              role: dbRole,
               avatar_url: retrievedAvatar,
               onboarding_completed: true,
               created_at: new Date().toISOString(),
@@ -254,9 +253,7 @@ export default function AuthView({
           }
         }
 
-        if (typeof window !== "undefined") {
-          localStorage.setItem("eventzone_user", JSON.stringify(signedInUser));
-        }
+        safeLocalStorageSet("eventzone_user", sanitizeUserForStorage(signedInUser));
         onAuthSuccess(signedInUser);
       }
     } catch (err) {
@@ -369,9 +366,7 @@ export default function AuthView({
               type="button"
               onClick={() => {
                 if (tempUser) {
-                  if (typeof window !== "undefined") {
-                    localStorage.setItem("eventzone_user", JSON.stringify(tempUser));
-                  }
+                  safeLocalStorageSet("eventzone_user", sanitizeUserForStorage(tempUser));
                   onAuthSuccess(tempUser);
                 } else {
                   setAuthMode("signin");

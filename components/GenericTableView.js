@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
 import { logCommunication, fetchCommunications } from "../lib/db";
+import A4BadgeSheet, { printA4BadgeDocument } from "./A4BadgeSheet";
 
 export default function GenericTableView({ 
   viewName, 
@@ -729,6 +730,7 @@ function AttendeesView({ state, onUpdateState, onOpenModal }) {
   const [selectedTicketType, setSelectedTicketType] = useState("all");
   const [selectedSubmissionModal, setSelectedSubmissionModal] = useState(null);
   const [previewImageModal, setPreviewImageModal] = useState(null);
+  const [selectedBadgeAttendee, setSelectedBadgeAttendee] = useState(null);
 
   // Helper to match an attendee to a ticket tier (handles exact match, ID match, or name aliases)
   const isAttendeeInTicketTier = (item, targetTicketName) => {
@@ -944,7 +946,7 @@ function AttendeesView({ state, onUpdateState, onOpenModal }) {
                 ))}
                 <th className="py-4 px-6 whitespace-nowrap">Status</th>
                 <th className="py-4 px-6 whitespace-nowrap">Registered</th>
-                <th className="py-4 px-6 text-center w-28 whitespace-nowrap sticky right-0 bg-slate-50 z-10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">Actions</th>
+                <th className="py-4 px-6 text-center min-w-[150px] whitespace-nowrap sticky right-0 bg-slate-50 z-10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1021,10 +1023,12 @@ function AttendeesView({ state, onUpdateState, onOpenModal }) {
                       </td>
                       <td className="py-4 px-6 text-slate-400 font-medium whitespace-nowrap">{a.registeredDate || "—"}</td>
                       <td className="py-4 px-6 text-center whitespace-nowrap sticky right-0 bg-white group-hover:bg-slate-50 z-10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-                        <div className="flex items-center justify-center gap-1">
+                        <div className="flex items-center justify-center gap-1.5">
+                          {/* 1. View Form Intake Responses */}
                           <button
+                            type="button"
                             onClick={() => setSelectedSubmissionModal(a)}
-                            className="p-1.5 hover:text-indigo-600 text-slate-400 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 rounded-lg transition-all cursor-pointer"
+                            className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200/80 hover:border-indigo-200 rounded-lg transition-all cursor-pointer shadow-2xs flex items-center justify-center"
                             title="View Full Form Intake Responses"
                           >
                             <Eye size={15} />
@@ -1032,45 +1036,21 @@ function AttendeesView({ state, onUpdateState, onOpenModal }) {
 
                           {!isArchived && (
                             <>
-                              <button 
-                                onClick={() => {
-                                  const name = prompt("Select session index/title or leave blank to make attendee a speaker globally? (You can assign them directly to sessions in the Calendar tab)");
-                                  if (name !== null) {
-                                    if (state.sessions && state.sessions.length > 0) {
-                                      const options = state.sessions.map((s, i) => `${i + 1}: ${s.title}`).join("\n");
-                                      const choice = prompt(`Enter session index (1 to ${state.sessions.length}) to assign them as speaker:\n\n${options}`);
-                                      if (choice) {
-                                        const idx = parseInt(choice) - 1;
-                                        if (idx >= 0 && idx < state.sessions.length) {
-                                          const targetSession = state.sessions[idx];
-                                          const updatedSpeakers = [...(targetSession.speakers || [])];
-                                          if (!updatedSpeakers.find(sp => sp.name === a.name)) {
-                                            updatedSpeakers.push({
-                                              id: Date.now(),
-                                              name: a.name,
-                                              image: a.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(a.name)}&background=random`
-                                            });
-                                            const updatedSessions = state.sessions.map((s, i) => i === idx ? { ...s, speakers: updatedSpeakers } : s);
-                                            onUpdateState("sessions", updatedSessions);
-                                            alert(`Successfully added ${a.name} as a speaker to "${targetSession.title}"!`);
-                                          } else {
-                                            alert(`${a.name} is already a speaker in this session.`);
-                                          }
-                                          return;
-                                        }
-                                      }
-                                    }
-                                    alert("Attendee made a speaker! You can now assign them to sessions on the Calendar page.");
-                                  }
-                                }}
-                                className="px-2 py-1 hover:text-emerald-650 text-slate-450 hover:bg-emerald-50 border border-transparent hover:border-emerald-100 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
-                                title="Assign Speaker to Session"
+                              {/* 2. Print Official Badge */}
+                              <button
+                                type="button"
+                                onClick={() => setSelectedBadgeAttendee(a)}
+                                className="p-1.5 text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-all cursor-pointer shadow-2xs flex items-center justify-center"
+                                title="Print Attendee Badge (A4 4-Fold)"
                               >
-                                Assign
+                                <Printer size={15} />
                               </button>
+
+                              {/* 3. Edit Attendee */}
                               <button 
+                                type="button"
                                 onClick={() => onOpenModal("attendee", a)}
-                                className="px-2 py-1 hover:text-indigo-650 text-slate-450 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
+                                className="px-2.5 py-1.5 text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg text-xs font-bold transition-all cursor-pointer"
                                 title="Edit Attendee"
                               >
                                 Edit
@@ -1079,6 +1059,7 @@ function AttendeesView({ state, onUpdateState, onOpenModal }) {
                           )}
                           {isArchived ? (
                             <button 
+                              type="button"
                               onClick={() => handleRestore(a.id)}
                               className="px-2 py-1 text-emerald-600 hover:bg-emerald-50 border border-transparent hover:border-emerald-100 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1"
                               title="Restore Attendee"
@@ -1088,9 +1069,10 @@ function AttendeesView({ state, onUpdateState, onOpenModal }) {
                             </button>
                           ) : (
                             <button 
+                              type="button"
                               onClick={() => handleArchive(a.id)}
-                              className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 border border-transparent hover:border-amber-100 rounded-lg transition-all cursor-pointer"
-                              title="Archive Attendee (Soft delete - data preserved)"
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-100 rounded-lg transition-all cursor-pointer flex items-center justify-center"
+                              title="Archive Attendee"
                             >
                               <Archive size={14} />
                             </button>
@@ -1124,6 +1106,96 @@ function AttendeesView({ state, onUpdateState, onOpenModal }) {
           onClose={() => setPreviewImageModal(null)}
         />
       )}
+
+      {/* Attendee Badge Preview & Print Modal */}
+      {selectedBadgeAttendee && (() => {
+        const attendee = selectedBadgeAttendee;
+        const resolvedTier = getResolvedTicketName(attendee, tickets);
+        const matchedTicket = tickets.find(t => (t.name || t.tier || "").trim().toLowerCase() === (resolvedTier || "").trim().toLowerCase()) || {};
+        const eventDetails = state.eventDetails || {};
+        const templateUrl = matchedTicket.badgeUrl || eventDetails.badgeUrl || "";
+        const badgeSettings = matchedTicket.badgeSettings || eventDetails.badgeSettings || {};
+        const attendeePhoto = getAttendeeDisplayImage(attendee);
+        const attendeeName = attendee.name || "Attendee";
+        const attendeeCompany = attendee.company || attendee.organization || "";
+        const attendeeJobTitle = attendee.jobTitle || attendee.job_title || attendee.role || "";
+        const badgeCode = attendee.badgeCode || attendee.badge_code || `EZ-${String(attendee.id || '').slice(-4).toUpperCase() || 'PASS'}`;
+        const eventTitle = eventDetails.title || "Conference Event";
+
+        const handlePrint = () => {
+          printA4BadgeDocument({
+            templateUrl,
+            attendeeName,
+            attendeePhoto,
+            attendeeCompany,
+            attendeeJobTitle,
+            ticketType: resolvedTier || "General Pass",
+            badgeCode,
+            eventTitle,
+            showFoldGuide: badgeSettings.showFoldGuide !== false,
+            showPhoto: badgeSettings.showPhoto !== false,
+            showQr: badgeSettings.showQr !== false,
+            cardTheme: badgeSettings.cardTheme || "white"
+          });
+        };
+
+        return (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-fade-in overflow-y-auto font-sans">
+            <div className="bg-white border border-slate-200 w-full max-w-lg rounded-3xl shadow-2xl p-6 sm:p-7 text-center space-y-4 animate-scale-up relative my-8 text-slate-900">
+              <button
+                onClick={() => setSelectedBadgeAttendee(null)}
+                className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 cursor-pointer font-bold"
+              >
+                <X size={18} />
+              </button>
+
+              <div className="flex items-center justify-center gap-2">
+                <Printer size={20} className="text-blue-600" />
+                <h3 className="text-lg font-black text-slate-900">Print Attendee Badge</h3>
+              </div>
+
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                Official A4 4-Fold Badge Sheet for <strong className="text-slate-800">{attendeeName}</strong> ({resolvedTier}).
+              </p>
+
+              {/* A4 4-Fold Preview */}
+              <div className="w-full max-w-[340px] sm:max-w-[370px] mx-auto shadow-xl rounded-2xl overflow-hidden border border-slate-200 bg-slate-50">
+                <A4BadgeSheet
+                  templateUrl={templateUrl}
+                  attendeeName={attendeeName}
+                  attendeePhoto={attendeePhoto}
+                  attendeeCompany={attendeeCompany}
+                  attendeeJobTitle={attendeeJobTitle}
+                  ticketType={resolvedTier}
+                  badgeCode={badgeCode}
+                  eventTitle={eventTitle}
+                  showFoldGuide={badgeSettings.showFoldGuide !== false}
+                  showPhoto={badgeSettings.showPhoto !== false}
+                  showQr={badgeSettings.showQr !== false}
+                  cardTheme={badgeSettings.cardTheme || "white"}
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setSelectedBadgeAttendee(null)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={handlePrint}
+                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/20 transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Printer size={15} />
+                  <span>Print Badge (A4)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -2407,8 +2479,9 @@ function TicketsView({ state, onUpdateState, onOpenModal, onSwitchView }) {
 
 // 9. CHECK IN VIEW
 function CheckInView({ state, onUpdateState }) {
-  const { attendees } = state;
+  const { attendees, tickets = [] } = state;
   const [search, setSearch] = useState("");
+  const [selectedBadgeAttendee, setSelectedBadgeAttendee] = useState(null);
 
   const handleToggle = (id) => {
     const updated = attendees.map(a => {
@@ -2513,12 +2586,21 @@ function CheckInView({ state, onUpdateState }) {
                       </td>
                       <td className="py-4 px-6 text-slate-400 font-bold">{a.checkinTime || "-"}</td>
                       <td className="py-4 px-6">
-                        <button 
-                          onClick={() => handleToggle(a.id)}
-                          className={`font-semibold py-1.5 px-4 rounded-xl text-[11px] shadow-sm transition-all duration-200 cursor-pointer ${isCheckedIn ? 'bg-rose-50 hover:bg-rose-500 hover:text-white text-rose-600' : 'bg-indigo-650 hover:bg-indigo-700 text-white'}`}
-                        >
-                          {isCheckedIn ? 'Check Out' : 'Check In'}
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => setSelectedBadgeAttendee(a)}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 rounded-xl transition-all cursor-pointer shadow-2xs"
+                            title="Print Attendee Badge (A4 4-Fold)"
+                          >
+                            <Printer size={14} />
+                          </button>
+                          <button 
+                            onClick={() => handleToggle(a.id)}
+                            className={`font-semibold py-1.5 px-4 rounded-xl text-[11px] shadow-sm transition-all duration-200 cursor-pointer ${isCheckedIn ? 'bg-rose-50 hover:bg-rose-500 hover:text-white text-rose-600' : 'bg-indigo-650 hover:bg-indigo-700 text-white'}`}
+                          >
+                            {isCheckedIn ? 'Check Out' : 'Check In'}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -2528,6 +2610,96 @@ function CheckInView({ state, onUpdateState }) {
           </table>
         </div>
       </div>
+
+      {/* Attendee Badge Preview & Print Modal for Check-In */}
+      {selectedBadgeAttendee && (() => {
+        const attendee = selectedBadgeAttendee;
+        const resolvedTier = getResolvedTicketName(attendee, tickets);
+        const matchedTicket = tickets.find(t => (t.name || t.tier || "").trim().toLowerCase() === (resolvedTier || "").trim().toLowerCase()) || {};
+        const eventDetails = state.eventDetails || {};
+        const templateUrl = matchedTicket.badgeUrl || eventDetails.badgeUrl || "";
+        const badgeSettings = matchedTicket.badgeSettings || eventDetails.badgeSettings || {};
+        const attendeePhoto = getAttendeeDisplayImage(attendee);
+        const attendeeName = attendee.name || "Attendee";
+        const attendeeCompany = attendee.company || attendee.organization || "";
+        const attendeeJobTitle = attendee.jobTitle || attendee.job_title || attendee.role || "";
+        const badgeCode = attendee.badgeCode || attendee.badge_code || `EZ-${String(attendee.id || '').slice(-4).toUpperCase() || 'PASS'}`;
+        const eventTitle = eventDetails.title || "Conference Event";
+
+        const handlePrint = () => {
+          printA4BadgeDocument({
+            templateUrl,
+            attendeeName,
+            attendeePhoto,
+            attendeeCompany,
+            attendeeJobTitle,
+            ticketType: resolvedTier || "General Pass",
+            badgeCode,
+            eventTitle,
+            showFoldGuide: badgeSettings.showFoldGuide !== false,
+            showPhoto: badgeSettings.showPhoto !== false,
+            showQr: badgeSettings.showQr !== false,
+            cardTheme: badgeSettings.cardTheme || "white"
+          });
+        };
+
+        return (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-fade-in overflow-y-auto font-sans">
+            <div className="bg-white border border-slate-200 w-full max-w-lg rounded-3xl shadow-2xl p-6 sm:p-7 text-center space-y-4 animate-scale-up relative my-8 text-slate-900">
+              <button
+                onClick={() => setSelectedBadgeAttendee(null)}
+                className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 cursor-pointer font-bold"
+              >
+                <X size={18} />
+              </button>
+
+              <div className="flex items-center justify-center gap-2">
+                <Printer size={20} className="text-blue-600" />
+                <h3 className="text-lg font-black text-slate-900">Print Attendee Badge</h3>
+              </div>
+
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                Official A4 4-Fold Badge Sheet for <strong className="text-slate-800">{attendeeName}</strong> ({resolvedTier}).
+              </p>
+
+              {/* A4 4-Fold Preview */}
+              <div className="w-full max-w-[340px] sm:max-w-[370px] mx-auto shadow-xl rounded-2xl overflow-hidden border border-slate-200 bg-slate-50">
+                <A4BadgeSheet
+                  templateUrl={templateUrl}
+                  attendeeName={attendeeName}
+                  attendeePhoto={attendeePhoto}
+                  attendeeCompany={attendeeCompany}
+                  attendeeJobTitle={attendeeJobTitle}
+                  ticketType={resolvedTier}
+                  badgeCode={badgeCode}
+                  eventTitle={eventTitle}
+                  showFoldGuide={badgeSettings.showFoldGuide !== false}
+                  showPhoto={badgeSettings.showPhoto !== false}
+                  showQr={badgeSettings.showQr !== false}
+                  cardTheme={badgeSettings.cardTheme || "white"}
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setSelectedBadgeAttendee(null)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={handlePrint}
+                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/20 transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Printer size={15} />
+                  <span>Print Badge (A4)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

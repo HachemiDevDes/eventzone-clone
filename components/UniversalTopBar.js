@@ -4,7 +4,7 @@
 import React, { useState } from "react";
 import { 
   Globe, ChevronDown, User, Ticket, 
-  Building2, LogOut, Plus, Smartphone, Check 
+  Building2, LogOut, Plus, Check 
 } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
 import { smoothScrollTo } from "../lib/smoothScroll";
@@ -128,10 +128,9 @@ export default function UniversalTopBar({
         <a 
           href="#mobile-app" 
           onClick={handleMobileAppClick}
-          className="text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors flex items-center gap-1 cursor-pointer"
+          className="text-xs font-bold text-slate-600 hover:text-blue-600 transition-colors cursor-pointer"
         >
-          <Smartphone size={13} />
-          <span>{t("nav.mobileApp", "Mobile App")}</span>
+          {t("nav.mobileApp", "Mobile App")}
         </a>
         <button 
           onClick={handleForOrganizersClick}

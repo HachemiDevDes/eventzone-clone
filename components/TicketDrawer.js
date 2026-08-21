@@ -24,6 +24,7 @@ import {
   Star,
   Sparkle
 } from "lucide-react";
+import A4BadgeSheet from "./A4BadgeSheet";
 
 // Standard preset tier name chips
 const TIER_NAME_SUGGESTIONS = [
@@ -108,9 +109,11 @@ export default function TicketDrawer({
   const [badgeType, setBadgeType] = useState("thermal_qr"); // 'thermal_qr' | 'a4'
   const [badgeUrl, setBadgeUrl] = useState("");
   const [badgeSettings, setBadgeSettings] = useState({
-    orientation: "portrait", // 'portrait' | 'landscape'
-    showLanyardGuide: true,
-    includeLogo: true,
+    orientation: "portrait",
+    showFoldGuide: true,
+    showPhoto: true,
+    showQr: true,
+    cardTheme: "white", // "white" | "glass" | "clean"
     includeCompany: true,
     includeTimestamp: true,
   });
@@ -142,8 +145,10 @@ export default function TicketDrawer({
       setBadgeUrl(ticket.badgeUrl || "");
       setBadgeSettings({
         orientation: "portrait",
-        showLanyardGuide: true,
-        includeLogo: true,
+        showFoldGuide: true,
+        showPhoto: true,
+        showQr: true,
+        cardTheme: "white",
         includeCompany: true,
         includeTimestamp: true,
         ...(ticket.badgeSettings || {})
@@ -165,8 +170,10 @@ export default function TicketDrawer({
       setBadgeUrl("");
       setBadgeSettings({
         orientation: "portrait",
-        showLanyardGuide: true,
-        includeLogo: true,
+        showFoldGuide: true,
+        showPhoto: true,
+        showQr: true,
+        cardTheme: "white",
         includeCompany: true,
         includeTimestamp: true,
       });
@@ -947,7 +954,7 @@ export default function TicketDrawer({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
                       <div className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                        A4 Full Page Design
+                        A4 4-Fold Badge Sheet
                         <span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md">
                           210 x 297 mm
                         </span>
@@ -959,22 +966,22 @@ export default function TicketDrawer({
                       )}
                     </div>
                     <p className="text-xs text-slate-500 mt-1 leading-snug">
-                      Full-size printable document for foldable attendee credentials, schedule, and welcome guide.
+                      Custom A4 template with attendee credentials &amp; QR codes centered in the top-left and top-right quadrants for standard lanyard pouch folding.
                     </p>
                   </div>
                 </div>
               </div>
 
-              {/* Artwork Uploader for A4 */}
+              {/* Artwork Uploader & Settings for A4 */}
               {badgeType === "a4" && (
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4.5 flex flex-col gap-3.5">
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4.5 flex flex-col gap-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-xs font-bold text-slate-900">
-                        Upload A4 Template Artwork
+                        Upload A4 Background Artwork Template
                       </div>
                       <div className="text-[11px] text-slate-500">
-                        Recommended format: High-res PNG, JPG, or PDF (210 x 297 mm).
+                        Full-page background (210 x 297 mm). Top-left and top-right cards will overlay dynamically.
                       </div>
                     </div>
                     {badgeUrl && (
@@ -1027,24 +1034,61 @@ export default function TicketDrawer({
                       ) : (
                         <div className="flex items-center gap-2 text-xs">
                           <Upload size={16} className="text-blue-600" />
-                          <span className="font-bold text-blue-600">Upload background artwork</span>
+                          <span className="font-bold text-blue-600">Upload A4 background template</span>
                           <span className="text-slate-400 font-medium">(PNG, JPG, or PDF)</span>
                         </div>
                       )}
                     </div>
                   )}
 
-                  {/* Orientation */}
-                  <div className="grid grid-cols-2 gap-3 pt-1">
+                  {/* Badge Controls Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-200">
                     <div className="flex flex-col gap-1">
-                      <label className="text-[11px] font-bold text-slate-600 uppercase">Orientation</label>
+                      <label className="text-[11px] font-bold text-slate-600 uppercase">Card Theme</label>
                       <select
-                        value={badgeSettings.orientation || "portrait"}
-                        onChange={(e) => setBadgeSettings({ ...badgeSettings, orientation: e.target.value })}
+                        value={badgeSettings.cardTheme || "white"}
+                        onChange={(e) => setBadgeSettings({ ...badgeSettings, cardTheme: e.target.value })}
                         className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
                       >
-                        <option value="portrait">Portrait</option>
-                        <option value="landscape">Landscape</option>
+                        <option value="white">Solid White Card</option>
+                        <option value="glass">Translucent Glass Card</option>
+                        <option value="clean">Minimal Border Outline</option>
+                      </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11px] font-bold text-slate-600 uppercase">Fold Guidelines</label>
+                      <select
+                        value={badgeSettings.showFoldGuide !== false ? "true" : "false"}
+                        onChange={(e) => setBadgeSettings({ ...badgeSettings, showFoldGuide: e.target.value === "true" })}
+                        className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
+                      >
+                        <option value="true">Show Center Fold Crosshairs</option>
+                        <option value="false">Hide Fold Guidelines</option>
+                      </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11px] font-bold text-slate-600 uppercase">Attendee Photo</label>
+                      <select
+                        value={badgeSettings.showPhoto !== false ? "true" : "false"}
+                        onChange={(e) => setBadgeSettings({ ...badgeSettings, showPhoto: e.target.value === "true" })}
+                        className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
+                      >
+                        <option value="true">Show Avatar / Photo Circle</option>
+                        <option value="false">Text &amp; QR Only</option>
+                      </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11px] font-bold text-slate-600 uppercase">QR Code Pass</label>
+                      <select
+                        value={badgeSettings.showQr !== false ? "true" : "false"}
+                        onChange={(e) => setBadgeSettings({ ...badgeSettings, showQr: e.target.value === "true" })}
+                        className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
+                      >
+                        <option value="true">Include Door Check-in QR</option>
+                        <option value="false">Badge ID Only</option>
                       </select>
                     </div>
                   </div>
@@ -1057,10 +1101,10 @@ export default function TicketDrawer({
                   <div className="flex items-center gap-2">
                     <Sparkles size={15} className="text-amber-400" />
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                      Output Sample Preview
+                      Live Output Sample Preview
                     </span>
                   </div>
-                  <span className="text-xs font-medium text-slate-400">Attendee: Elena Rostova</span>
+                  <span className="text-xs font-medium text-slate-400">Sample: Elena Rostova</span>
                 </div>
 
                 <div className="flex justify-center py-2">
@@ -1094,40 +1138,22 @@ export default function TicketDrawer({
                     </div>
                   )}
 
-                  {/* A4 Full Sheet */}
+                  {/* A4 4-Fold Sheet Preview */}
                   {badgeType === "a4" && (
-                    <div 
-                      className="w-60 h-80 bg-white text-slate-900 rounded-lg p-3.5 shadow-xl flex flex-col justify-between relative border border-slate-300 text-[9px]"
-                      style={{
-                        backgroundImage: badgeUrl ? `url(${badgeUrl})` : "none",
-                        backgroundSize: "cover",
-                        backgroundPosition: "center"
-                      }}
-                    >
-                      <div className="border-b border-slate-200 pb-2 flex justify-between items-start bg-white/90 p-1.5 rounded">
-                        <div>
-                          <div className="font-black text-[10px] text-slate-900 uppercase">{eventTitle}</div>
-                          <div className="text-[8px] text-slate-500">Official Pass & Schedule</div>
-                        </div>
-                        <span className="text-[8px] font-bold px-1.5 py-0.5 rounded text-white bg-blue-600">
-                          {name || "VIP Pass"}
-                        </span>
-                      </div>
-
-                      <div className="border border-dashed border-slate-300 p-2.5 rounded-lg bg-slate-50/90 text-center my-auto">
-                        <div className="text-[7px] text-slate-400 uppercase font-bold">Fold / Cut Line</div>
-                        <div className="font-extrabold text-xs text-slate-900 mt-0.5">Elena Rostova</div>
-                        <div className="text-[9px] font-semibold text-slate-600">InnovateTech Labs</div>
-                        <div className="flex justify-center my-1.5">
-                          <QrCode size={38} className="text-slate-900" />
-                        </div>
-                        <div className="text-[7px] text-slate-500 font-mono">EZ-2026-A4-8942</div>
-                      </div>
-
-                      <div className="bg-white/90 p-1.5 rounded text-[7px] text-slate-500 border border-slate-150">
-                        <div className="font-bold text-slate-700">Agenda:</div>
-                        <div>• Keynote: 09:30 AM (Auditorium A)</div>
-                      </div>
+                    <div className="w-full max-w-[340px] sm:max-w-[380px]">
+                      <A4BadgeSheet
+                        templateUrl={badgeUrl}
+                        attendeeName="Elena Rostova"
+                        attendeeCompany="InnovateTech Labs"
+                        attendeeJobTitle="Lead AI Engineer"
+                        ticketType={name || "VIP Access Pass"}
+                        badgeCode="EZ-8942-ELN"
+                        eventTitle={eventTitle}
+                        showFoldGuide={badgeSettings.showFoldGuide !== false}
+                        showPhoto={badgeSettings.showPhoto !== false}
+                        showQr={badgeSettings.showQr !== false}
+                        cardTheme={badgeSettings.cardTheme || "white"}
+                      />
                     </div>
                   )}
                 </div>

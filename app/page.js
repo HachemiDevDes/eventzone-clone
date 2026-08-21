@@ -54,16 +54,13 @@ import {
   setActiveEventId, getActiveEventId, DEFAULT_EVENT_ID, SHOWCASE_EVENTS,
   subscribeToRealtimeSync, broadcastRealtimeChange
 } from "../lib/db";
-import { supabase } from "../lib/supabase";
-
-function safeLocalStorageSet(key, value) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(key, typeof value === "string" ? value : JSON.stringify(value));
-  } catch (err) {
-    console.warn(`Could not save key ${key} to localStorage:`, err);
-  }
-}
+import { 
+  supabase, 
+  safeLocalStorageSet, 
+  safeLocalStorageGet, 
+  safeLocalStorageRemove, 
+  sanitizeUserForStorage 
+} from "../lib/supabase";
 
 const INDUSTRIES = [
   "Technology, AI & Software",
@@ -105,8 +102,13 @@ export function HomeContent() {
   const [mounted, setMounted] = useState(false);
 
   // Authentication & Role State
-  const [currentUser, setCurrentUser] = useState(null);
-  const [authInitialized, setAuthInitialized] = useState(true);
+  const [currentUser, setCurrentUser] = useState(() => {
+    if (typeof window !== "undefined") {
+      return safeLocalStorageGet("eventzone_user", null);
+    }
+    return null;
+  });
+  const [authInitialized, setAuthInitialized] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalInitialMode, setAuthModalInitialMode] = useState("signin");
 
@@ -220,10 +222,9 @@ export function HomeContent() {
     // 1. Initial check from LocalStorage for instant rendering
     if (typeof window !== "undefined") {
       try {
-        const stored = localStorage.getItem("eventzone_user");
+        const stored = safeLocalStorageGet("eventzone_user");
         if (stored) {
-          const parsed = JSON.parse(stored);
-          setCurrentUser(parsed);
+          setCurrentUser(stored);
         }
       } catch (e) {
         console.warn("Session restore error:", e);
@@ -236,10 +237,35 @@ export function HomeContent() {
     const syncSupabaseSession = async (explicitSession = null) => {
       try {
         let session = explicitSession;
+
+        // If no explicit session is passed, check if PKCE auth code is present in URL
+        if (!session && typeof window !== "undefined") {
+          const searchParams = new URLSearchParams(window.location.search);
+          const authCode = searchParams.get("code");
+          if (authCode) {
+            try {
+              const { data: exchanged, error: exchangeError } = await supabase.auth.exchangeCodeForSession(authCode);
+              if (!exchangeError && exchanged?.session) {
+                session = exchanged.session;
+              } else if (exchangeError) {
+                console.warn("PKCE code exchange error:", exchangeError);
+              }
+              // Clean up the URL search params so the one-time code is not re-evaluated
+              const cleanUrl = new URL(window.location.href);
+              cleanUrl.searchParams.delete("code");
+              cleanUrl.searchParams.delete("state");
+              window.history.replaceState({}, document.title, cleanUrl.toString());
+            } catch (pkceErr) {
+              console.warn("PKCE exchange exception:", pkceErr);
+            }
+          }
+        }
+
         if (!session) {
           const { data } = await supabase.auth.getSession();
           session = data?.session;
         }
+
         if (session?.user && isMounted) {
           const userId = session.user.id;
           const { data: profile } = await supabase
@@ -253,20 +279,24 @@ export function HomeContent() {
           const retrievedAvatar = profile?.avatar_url || session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(retrievedName)}&background=0b5cdb&color=fff`;
 
           if (!profile) {
+            const dbRole = retrievedRole === 'attendee' || retrievedRole === 'visitor' ? 'attendee' : 'organizer';
             await supabase.from('profiles').upsert({
               id: userId,
               full_name: retrievedName,
               email: session.user.email,
               avatar_url: retrievedAvatar,
-              role: retrievedRole === 'attendee' ? 'attendee' : 'organizer'
-            }).catch(console.error);
+              role: dbRole,
+              onboarding_completed: true,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }, { onConflict: "id" }).catch(console.error);
           }
 
           const syncedUser = {
             id: userId,
             email: session.user.email,
             fullName: retrievedName,
-            role: retrievedRole === 'attendee' ? 'visitor' : retrievedRole,
+            role: retrievedRole === 'attendee' || retrievedRole === 'visitor' ? 'visitor' : 'organizer',
             companyName: profile?.company_name || session.user.user_metadata?.company_name || "",
             jobTitle: profile?.job_title || session.user.user_metadata?.job_title || "",
             phone: profile?.phone || "",
@@ -282,7 +312,7 @@ export function HomeContent() {
           };
 
           setCurrentUser(syncedUser);
-          safeLocalStorageSet("eventzone_user", syncedUser);
+          safeLocalStorageSet("eventzone_user", sanitizeUserForStorage(syncedUser));
 
           // Cross-device / App <-> Web Real-time Database Subscription
           if (!profileChannel) {
@@ -302,7 +332,7 @@ export function HomeContent() {
                       id: userId,
                       email: updated.email || session.user.email,
                       fullName: updatedName,
-                      role: updatedRole === 'attendee' ? 'visitor' : updatedRole,
+                      role: updatedRole === 'attendee' || updatedRole === 'visitor' ? 'visitor' : 'organizer',
                       companyName: updated.company_name || "",
                       jobTitle: updated.job_title || "",
                       phone: updated.phone || "",
@@ -318,7 +348,7 @@ export function HomeContent() {
                     };
 
                     setCurrentUser(updatedUser);
-                    safeLocalStorageSet("eventzone_user", updatedUser);
+                    safeLocalStorageSet("eventzone_user", sanitizeUserForStorage(updatedUser));
                   }
                 }
               )
@@ -337,9 +367,7 @@ export function HomeContent() {
     // 3. Listen to auth state changes (e.g. login, token refresh, logout, OAuth callback)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === "SIGNED_OUT" && isMounted) {
-        if (typeof window !== "undefined") {
-          localStorage.removeItem("eventzone_user");
-        }
+        safeLocalStorageRemove("eventzone_user");
         setCurrentUser(null);
       } else if ((event === "SIGNED_IN" || event === "USER_UPDATED" || event === "TOKEN_REFRESHED") && session?.user && isMounted) {
         await syncSupabaseSession(session);
@@ -354,15 +382,14 @@ export function HomeContent() {
     };
   }, []);
 
-
   // Load User Events & Public Events
   useEffect(() => {
     const loadEventsData = async () => {
       try {
         const [pEvents, uEvents, vRegs] = await Promise.all([
           fetchPublicEvents(),
-          currentUser ? fetchUserEvents(currentUser.id) : fetchUserEvents(null),
-          fetchVisitorRegistrations(currentUser?.email),
+          currentUser?.id ? fetchUserEvents(currentUser.id) : Promise.resolve([]),
+          currentUser?.email ? fetchVisitorRegistrations(currentUser.email) : Promise.resolve([]),
         ]);
         setPublicEvents(pEvents || []);
         setUserEvents(uEvents || []);
@@ -413,10 +440,8 @@ export function HomeContent() {
 
         if (eventResult.status === "fulfilled") {
           setEventDetails(eventResult.value);
-          if (eventResult.value && typeof window !== "undefined") {
-            try {
-              localStorage.setItem(`eventzone_cached_event_${activeEventId}`, JSON.stringify(eventResult.value));
-            } catch (e) {}
+          if (eventResult.value) {
+            safeLocalStorageSet(`eventzone_cached_event_${activeEventId}`, eventResult.value);
           }
         }
         if (sessionsResult.status === "fulfilled") setSessions(sessionsResult.value);
@@ -1062,10 +1087,8 @@ export function HomeContent() {
     switch (key) {
       case "eventDetails":
         setEventDetails(val);
-        if (val && typeof window !== "undefined") {
-          try {
-            localStorage.setItem(`eventzone_cached_event_${activeEventId}`, JSON.stringify(val));
-          } catch (e) {}
+        if (val) {
+          safeLocalStorageSet(`eventzone_cached_event_${activeEventId}`, val);
         }
         setPublicEvents(prev => prev.map(e => (activeEventId ? (e.id === activeEventId ? { ...e, ...val } : e) : e)));
         setUserEvents(prev => prev.map(e => (activeEventId ? (e.id === activeEventId ? { ...e, ...val } : e) : e)));
@@ -1611,6 +1634,19 @@ export function HomeContent() {
   // 2. ORGANIZER EVENTS HUB VIEW
   // ==========================================================================
   if (currentView === "events-hub") {
+    if (!currentUser && authInitialized) {
+      return (
+        <AuthView
+          initialMode="signin"
+          onAuthSuccess={(u) => {
+            setCurrentUser(u);
+            setCurrentView("events-hub");
+          }}
+          onGoToHome={() => setCurrentView("home")}
+          onClose={() => setCurrentView("home")}
+        />
+      );
+    }
     return (
       <OrganizerEventsHub
         events={userEvents}
@@ -1640,6 +1676,19 @@ export function HomeContent() {
   // 2.5. CREATE NEW EVENT (DEDICATED FULL-PAGE VIEW)
   // ==========================================================================
   if (currentView === "create-event") {
+    if (!currentUser && authInitialized) {
+      return (
+        <AuthView
+          initialMode="signin"
+          onAuthSuccess={(u) => {
+            setCurrentUser(u);
+            setCurrentView("create-event");
+          }}
+          onGoToHome={() => setCurrentView("home")}
+          onClose={() => setCurrentView("home")}
+        />
+      );
+    }
     return (
       <EventCreationWizard
         onCancel={() => setCurrentView("events-hub")}
@@ -1686,6 +1735,19 @@ export function HomeContent() {
   // ==========================================================================
   // 4. SINGLE EVENT DASHBOARD (ORGANIZER VIEW)
   // ==========================================================================
+  if (!currentUser && authInitialized) {
+    return (
+      <AuthView
+        initialMode="signin"
+        onAuthSuccess={(u) => {
+          setCurrentUser(u);
+        }}
+        onGoToHome={() => setCurrentView("home")}
+        onClose={() => setCurrentView("home")}
+      />
+    );
+  }
+
   const currentEventSummary = userEvents.find(e => e.id === activeEventId) || eventDetails || {};
 
   return (

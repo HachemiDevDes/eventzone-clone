@@ -11,6 +11,7 @@ import {
 import QRCode from "qrcode";
 import { useLanguage } from "../lib/i18n";
 import UniversalTopBar from "./UniversalTopBar";
+import A4BadgeSheet, { printA4BadgeDocument } from "./A4BadgeSheet";
 
 export default function MyTicketsPage({
   registrations = [],
@@ -557,109 +558,97 @@ export default function MyTicketsPage({
       )}
 
       {/* ==================================================================== */}
-      {/* 2. OFFICIAL A6 PRINTABLE CONFERENCE BADGE MODAL                      */}
+      {/* 2. OFFICIAL A4 4-FOLD PRINTABLE CONFERENCE BADGE MODAL               */}
       {/* ==================================================================== */}
-      {selectedBadgePass && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-fade-in overflow-y-auto font-sans">
-          <div className="bg-white border border-slate-200 w-full max-w-md rounded-3xl shadow-2xl p-6 sm:p-8 text-center space-y-5 animate-scale-up relative my-8 text-slate-900">
-            <button
-              onClick={() => setSelectedBadgePass(null)}
-              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 cursor-pointer font-bold"
-            >
-              <X size={18} />
-            </button>
+      {selectedBadgePass && (() => {
+        const matchedEvent = events.find(e => e.id === selectedBadgePass.eventId) || {};
+        const badgeTemplateUrl = selectedBadgePass.templateUrl || selectedBadgePass.badgeUrl || matchedEvent.badgeUrl || "";
+        const badgeSettings = selectedBadgePass.badgeSettings || matchedEvent.badgeSettings || {};
+        const attendeeName = selectedBadgePass.attendeeName || currentUser?.fullName || "Conference Attendee";
+        const attendeePhoto = selectedBadgePass.photo || selectedBadgePass.avatar || currentUser?.avatar || currentUser?.avatar_url || "";
+        const attendeeCompany = selectedBadgePass.company || currentUser?.companyName || currentUser?.jobTitle || "Verified Delegate";
+        const attendeeJobTitle = selectedBadgePass.jobTitle || currentUser?.jobTitle || "";
+        const ticketType = selectedBadgePass.ticketType || "General Admission";
+        const badgeCode = selectedBadgePass.badgeCode || "EZ-PASS";
+        const eventTitle = selectedBadgePass.eventTitle || "Conference Event";
+        const qrUrl = qrCodeUrls[selectedBadgePass.id] || "";
 
-            <div className="flex items-center justify-center gap-2">
-              <Printer size={20} className="text-blue-600" />
-              <h3 className="text-lg font-black text-slate-900">Official A6 Conference Badge</h3>
-            </div>
+        const handlePrint = () => {
+          printA4BadgeDocument({
+            templateUrl: badgeTemplateUrl,
+            attendeeName,
+            attendeePhoto,
+            attendeeCompany,
+            attendeeJobTitle,
+            ticketType,
+            badgeCode,
+            eventTitle,
+            qrCodeUrl: qrUrl,
+            showFoldGuide: badgeSettings.showFoldGuide !== false,
+            showPhoto: badgeSettings.showPhoto !== false,
+            showQr: badgeSettings.showQr !== false,
+            cardTheme: badgeSettings.cardTheme || "white"
+          });
+        };
 
-            {/* A6 Printable Badge Container (Ratio 105mm x 148mm ~ 1:1.41) */}
-            <div 
-              id="printable-badge"
-              className="w-full max-w-[320px] mx-auto bg-white border-2 border-slate-800 rounded-2xl shadow-xl overflow-hidden text-slate-900 flex flex-col justify-between min-h-[440px] relative"
-            >
-              {/* Lanyard Punch Hole Indicator */}
-              <div className="w-12 h-2.5 bg-slate-200 border border-slate-300 rounded-full mx-auto mt-2" />
-
-              {/* Event Header */}
-              <div className="p-4 bg-slate-900 text-white text-center mt-2">
-                <img 
-                  src="https://i.imgur.com/jFDrQbM.png" 
-                  alt="eventzone" 
-                  style={{ height: '20px', width: 'auto', maxWidth: '120px', objectFit: 'contain' }}
-                  className="h-5 w-auto object-contain mx-auto filter brightness-0 invert opacity-90"
-                />
-                <h4 className="text-xs font-black uppercase tracking-wider mt-1 truncate">
-                  {selectedBadgePass.eventTitle}
-                </h4>
-              </div>
-
-              {/* Attendee Profile Section */}
-              <div className="p-4 space-y-2 text-center">
-                <div className="w-20 h-20 rounded-full bg-blue-100 border-2 border-blue-600 flex items-center justify-center mx-auto overflow-hidden shadow-inner">
-                  {currentUser?.avatar || currentUser?.avatar_url ? (
-                    <img src={currentUser.avatar || currentUser.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
-                  ) : (
-                    <User size={36} className="text-blue-600" />
-                  )}
-                </div>
-
-                <div>
-                  <h2 className="text-xl font-black text-slate-900 tracking-tight leading-tight">
-                    {selectedBadgePass.attendeeName || currentUser?.fullName || "Conference Attendee"}
-                  </h2>
-                  <p className="text-xs font-bold text-slate-500">
-                    {currentUser?.companyName || currentUser?.jobTitle || "Verified Delegate"}
-                  </p>
-                </div>
-              </div>
-
-              {/* QR Code Verification Section */}
-              <div className="p-3 bg-slate-50 border-t border-b border-slate-200 flex items-center justify-center gap-3">
-                {qrCodeUrls[selectedBadgePass.id] && (
-                  <img 
-                    src={qrCodeUrls[selectedBadgePass.id]} 
-                    alt="QR" 
-                    className="w-16 h-16 object-contain"
-                  />
-                )}
-                <div className="text-left text-[11px] font-mono">
-                  <span className="text-[9px] uppercase font-bold text-slate-400 block">Badge ID</span>
-                  <span className="font-extrabold text-slate-900">{selectedBadgePass.badgeCode}</span>
-                  <span className="text-[9px] text-emerald-600 font-bold block mt-0.5">✓ Gate Pass Active</span>
-                </div>
-              </div>
-
-              {/* Bottom Tier Ribbon */}
-              <div className={`p-3 text-center text-xs font-black uppercase tracking-widest text-white ${
-                (selectedBadgePass.ticketType || "").toLowerCase().includes("vip")
-                  ? "bg-amber-500"
-                  : "bg-blue-600"
-              }`}>
-                {selectedBadgePass.ticketType || "General Admission"}
-              </div>
-            </div>
-
-            {/* Print & Close Buttons */}
-            <div className="flex gap-3 pt-2">
+        return (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-fade-in overflow-y-auto font-sans">
+            <div className="bg-white border border-slate-200 w-full max-w-lg rounded-3xl shadow-2xl p-6 sm:p-7 text-center space-y-4 animate-scale-up relative my-8 text-slate-900">
               <button
                 onClick={() => setSelectedBadgePass(null)}
-                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 cursor-pointer font-bold"
               >
-                Close
+                <X size={18} />
               </button>
-              <button
-                onClick={() => window.print()}
-                className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/20 transition-all cursor-pointer flex items-center justify-center gap-2"
-              >
-                <Printer size={15} />
-                <span>Print Document</span>
-              </button>
+
+              <div className="flex items-center justify-center gap-2">
+                <Printer size={20} className="text-blue-600" />
+                <h3 className="text-lg font-black text-slate-900">Official A4 4-Fold Badge Sheet</h3>
+              </div>
+
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                Fold along the center guidelines to create a dual-sided conference neck badge for your lanyard sleeve.
+              </p>
+
+              {/* A4 4-Fold Sheet Preview Container */}
+              <div className="w-full max-w-[340px] sm:max-w-[370px] mx-auto shadow-xl rounded-2xl overflow-hidden border border-slate-200 bg-slate-50">
+                <A4BadgeSheet
+                  templateUrl={badgeTemplateUrl}
+                  attendeeName={attendeeName}
+                  attendeePhoto={attendeePhoto}
+                  attendeeCompany={attendeeCompany}
+                  attendeeJobTitle={attendeeJobTitle}
+                  ticketType={ticketType}
+                  badgeCode={badgeCode}
+                  eventTitle={eventTitle}
+                  qrCodeUrl={qrUrl}
+                  showFoldGuide={badgeSettings.showFoldGuide !== false}
+                  showPhoto={badgeSettings.showPhoto !== false}
+                  showQr={badgeSettings.showQr !== false}
+                  cardTheme={badgeSettings.cardTheme || "white"}
+                />
+              </div>
+
+              {/* Print & Close Buttons */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setSelectedBadgePass(null)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={handlePrint}
+                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/20 transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Printer size={15} />
+                  <span>Print Document</span>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

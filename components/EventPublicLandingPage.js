@@ -20,6 +20,7 @@ import FormFileUploader from "./FormFileUploader";
 import { getFormSections } from "../lib/formPresets";
 import { smoothScrollTo } from "../lib/smoothScroll";
 import { getYouTubeEmbedUrl } from "./EventDetailsView";
+import { printA4BadgeDocument } from "./A4BadgeSheet";
 
 export default function EventPublicLandingPage({
   eventId,
@@ -1799,7 +1800,21 @@ export default function EventPublicLandingPage({
                             <button
                               type="button"
                               onClick={() => {
-                                if (typeof window !== "undefined") window.print();
+                                printA4BadgeDocument({
+                                  templateUrl: selectedTierObj?.badgeUrl || eventDetails?.badgeUrl || "",
+                                  attendeeName: rsvpName || currentUser?.fullName || "Attendee",
+                                  attendeePhoto: badgePhotoUrl || currentUser?.avatar || "",
+                                  attendeeCompany: rsvpCompany || organization || "",
+                                  attendeeJobTitle: rsvpJobTitle || "",
+                                  ticketType: selectedTier || "General Pass",
+                                  badgeCode: rsvpSuccess?.badgeCode || "EZ-PASS",
+                                  eventTitle: title || "Conference Event",
+                                  qrCodeUrl: qrCodeUrl || "",
+                                  showFoldGuide: true,
+                                  showPhoto: true,
+                                  showQr: true,
+                                  cardTheme: "white"
+                                });
                               }}
                               className="py-3.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
                             >
