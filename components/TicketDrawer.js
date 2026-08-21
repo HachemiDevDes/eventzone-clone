@@ -105,7 +105,7 @@ export default function TicketDrawer({
   const [selectedFormId, setSelectedFormId] = useState("default");
 
   // Badge Design State
-  const [badgeType, setBadgeType] = useState("thermal_qr"); // 'thermal_qr' | 'a6' | 'a4'
+  const [badgeType, setBadgeType] = useState("thermal_qr"); // 'thermal_qr' | 'a4'
   const [badgeUrl, setBadgeUrl] = useState("");
   const [badgeSettings, setBadgeSettings] = useState({
     orientation: "portrait", // 'portrait' | 'landscape'
@@ -932,39 +932,7 @@ export default function TicketDrawer({
                   </div>
                 </div>
 
-                {/* 2. A6 Lanyard Badge */}
-                <div
-                  onClick={() => setBadgeType("a6")}
-                  className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-start gap-4 ${
-                    badgeType === "a6"
-                      ? "border-blue-600 bg-blue-50/20 shadow-xs"
-                      : "border-slate-200 bg-white hover:border-slate-300"
-                  }`}
-                >
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${badgeType === "a6" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>
-                    <Layers size={20} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                        A6 Lanyard Badge
-                        <span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md">
-                          105 x 148 mm
-                        </span>
-                      </div>
-                      {badgeType === "a6" && (
-                        <div className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0">
-                          <Check size={12} />
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-500 mt-1 leading-snug">
-                      Standard conference neck badge for lanyards and plastic sleeves with optional punch guide.
-                    </p>
-                  </div>
-                </div>
-
-                {/* 3. A4 Full Page Design */}
+                {/* 2. A4 Full Page Design */}
                 <div
                   onClick={() => setBadgeType("a4")}
                   className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-start gap-4 ${
@@ -997,16 +965,16 @@ export default function TicketDrawer({
                 </div>
               </div>
 
-              {/* Artwork Uploader for A4 / A6 */}
-              {(badgeType === "a6" || badgeType === "a4") && (
+              {/* Artwork Uploader for A4 */}
+              {badgeType === "a4" && (
                 <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4.5 flex flex-col gap-3.5">
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-xs font-bold text-slate-900">
-                        Upload {badgeType.toUpperCase()} Template Artwork
+                        Upload A4 Template Artwork
                       </div>
                       <div className="text-[11px] text-slate-500">
-                        Recommended format: High-res PNG, JPG, or PDF ({badgeType === "a6" ? "105 x 148 mm" : "210 x 297 mm"}).
+                        Recommended format: High-res PNG, JPG, or PDF (210 x 297 mm).
                       </div>
                     </div>
                     {badgeUrl && (
@@ -1066,7 +1034,7 @@ export default function TicketDrawer({
                     </div>
                   )}
 
-                  {/* Orientation & Guide */}
+                  {/* Orientation */}
                   <div className="grid grid-cols-2 gap-3 pt-1">
                     <div className="flex flex-col gap-1">
                       <label className="text-[11px] font-bold text-slate-600 uppercase">Orientation</label>
@@ -1079,20 +1047,6 @@ export default function TicketDrawer({
                         <option value="landscape">Landscape</option>
                       </select>
                     </div>
-
-                    {badgeType === "a6" && (
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[11px] font-bold text-slate-600 uppercase">Punch Guide</label>
-                        <select
-                          value={badgeSettings.showLanyardGuide ? "true" : "false"}
-                          onChange={(e) => setBadgeSettings({ ...badgeSettings, showLanyardGuide: e.target.value === "true" })}
-                          className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none"
-                        >
-                          <option value="true">Show Lanyard Slot</option>
-                          <option value="false">No Slot Guide</option>
-                        </select>
-                      </div>
-                    )}
                   </div>
                 </div>
               )}
@@ -1136,43 +1090,6 @@ export default function TicketDrawer({
 
                       <div className="text-center border-t border-dashed border-slate-300 pt-2 text-[8px] text-slate-400 uppercase">
                         Kiosk Print • 10:45 AM
-                      </div>
-                    </div>
-                  )}
-
-                  {/* A6 Lanyard Badge */}
-                  {badgeType === "a6" && (
-                    <div 
-                      className="w-56 h-76 rounded-2xl p-4.5 shadow-xl flex flex-col justify-between relative overflow-hidden text-slate-900 border border-slate-200 bg-white"
-                      style={{
-                        backgroundImage: badgeUrl ? `url(${badgeUrl})` : "none",
-                        backgroundSize: "cover",
-                        backgroundPosition: "center"
-                      }}
-                    >
-                      {badgeSettings.showLanyardGuide && (
-                        <div className="absolute top-2 left-1/2 -translate-x-1/2 w-8 h-1.5 bg-slate-900/40 rounded-full border border-white/80"></div>
-                      )}
-
-                      <div className={`mt-2 ${badgeUrl ? "bg-white/90 backdrop-blur-xs p-2 rounded-xl" : ""}`}>
-                        <div className="text-[10px] font-extrabold uppercase text-slate-500 tracking-wider">{eventTitle}</div>
-                        <div className="text-[10px] font-black uppercase mt-0.5 text-blue-600">
-                          {name || "VIP Access Pass"}
-                        </div>
-                      </div>
-
-                      <div className={`my-auto text-center ${badgeUrl ? "bg-white/95 backdrop-blur-xs p-3 rounded-xl shadow-xs" : ""}`}>
-                        <div className="text-base font-black text-slate-900 leading-tight">Elena Rostova</div>
-                        <div className="text-[11px] font-semibold text-slate-600 mt-0.5">InnovateTech Labs</div>
-                        <div className="text-[10px] text-slate-400">Delegate</div>
-                      </div>
-
-                      <div className={`flex items-center justify-between ${badgeUrl ? "bg-white/90 backdrop-blur-xs p-2 rounded-xl" : "border-t border-slate-150 pt-2"}`}>
-                        <div className="flex flex-col">
-                          <span className="text-[8px] font-bold uppercase text-slate-400">ID</span>
-                          <span className="text-[10px] font-black text-slate-800">EZ-8942</span>
-                        </div>
-                        <QrCode size={34} className="text-slate-900" />
                       </div>
                     </div>
                   )}

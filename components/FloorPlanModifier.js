@@ -459,6 +459,10 @@ export default function FloorPlanModifier({
   initialFloors = [],
   onSaveFloors
 }) {
+  const initialFloorBlueprint = (initialFloors && initialFloors.length > 0 && initialFloors[0]?.blueprint)
+    ? initialFloors[0].blueprint
+    : (initialBlueprintState || {});
+
   const [floors, setFloors] = useState(() => {
     if (initialFloors && initialFloors.length > 0) {
       return initialFloors;
@@ -467,7 +471,7 @@ export default function FloorPlanModifier({
       id: "default-floor-id",
       name: planName || "Ground Floor",
       elements: initialLayout || [],
-      blueprint: initialBlueprintState || {
+      blueprint: initialFloorBlueprint || {
         url: '', name: 'Venue Blueprint', opacity: 0.8,
         x: 0, y: 0, width: 800, height: 600, rotation: 0, isLocked: false,
       }
@@ -481,7 +485,7 @@ export default function FloorPlanModifier({
     return "default-floor-id";
   });
 
-  const bp = initialBlueprintState || {};
+  const bp = initialFloorBlueprint || {};
   const [elements, setElements] = useState(() => {
     if (initialFloors && initialFloors.length > 0) {
       return initialFloors[0].elements || [];
@@ -3086,14 +3090,9 @@ export default function FloorPlanModifier({
     }
   };
 
-  const handleSave = () => {
-    if (onSaveFloors) {
-      syncAndSaveFloors(elements);
-    } else {
-      onSaveLayout(elements);
-      if (onSaveBlueprintState) onSaveBlueprintState(getCurrentBlueprintState());
-    }
-    if (onSaveFontFamily) onSaveFontFamily(floorPlanFont);
+  const handleBackClick = () => {
+    syncAndSaveFloors(elements, getCurrentBlueprintState());
+    if (onBack) onBack();
   };
 
   const categories = [
@@ -3400,7 +3399,7 @@ export default function FloorPlanModifier({
             <button
               key={el.id}
               onClick={() => handleItemClick(el)}
-              className={`w-full text-left px-3.5 py-3 border rounded-2xl flex items-center justify-between transition-all duration-205 cursor-pointer ${
+              className={`w-full text-left px-3.5 py-3 border rounded-2xl flex items-center justify-between transition-all duration-200 cursor-pointer ${
                 isSelected
                   ? "bg-indigo-650 border-indigo-650 text-white shadow-md shadow-indigo-100"
                   : "bg-white/65 hover:bg-white border-slate-200/50 text-slate-800 hover:border-slate-300 shadow-sm"
@@ -3545,7 +3544,7 @@ export default function FloorPlanModifier({
           <div className="flex items-center gap-2.5 min-w-0">
             {onBack && !initialPreviewMode && (
               <button
-                onClick={onBack}
+                onClick={handleBackClick}
                 className="text-slate-400 hover:text-indigo-650 transition-colors duration-150 cursor-pointer p-1.5 flex items-center justify-center shrink-0"
                 title="Back to Floor Plans gallery"
               >
@@ -3639,7 +3638,7 @@ export default function FloorPlanModifier({
 
   return (
     <div className="flex flex-col flex-1 bg-slate-50 select-none h-screen w-full border-none rounded-none shadow-none overflow-hidden min-h-0">
-      <header className={`border-b border-slate-205/60 flex shrink-0 transition-all ${
+      <header className={`border-b border-slate-200 flex shrink-0 transition-all ${
         isPreviewMode && previewDeviceMode === "mobile" && !isDesktopViewport
           ? "fixed top-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md flex-col justify-center px-5 pt-5 pb-3 h-auto gap-3 items-stretch shadow-sm"
           : initialPreviewMode 
@@ -3653,7 +3652,7 @@ export default function FloorPlanModifier({
             <div className="flex items-center gap-3">
               {onBack && !initialPreviewMode && (
                 <button
-                  onClick={onBack}
+                  onClick={handleBackClick}
                   className="text-slate-400 hover:text-indigo-650 transition-colors duration-150 cursor-pointer p-1.5 flex items-center justify-center"
                   title="Back to Floor Plans gallery"
                 >
@@ -3879,17 +3878,6 @@ export default function FloorPlanModifier({
                 >
                   {isPreviewMode ? <EyeOff size={15} /> : <Eye size={15} />}
                   <span>Preview Map</span>
-                </button>
-              )}
-
-              {!initialPreviewMode && (
-                <button 
-                  onClick={handleSave}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-indigo-650 hover:bg-indigo-700 text-white rounded-xl font-semibold text-xs transition-all shadow-sm duration-200 cursor-pointer"
-                  title="Save changes"
-                >
-                  <Save size={15} />
-                  <span>Save</span>
                 </button>
               )}
             </div>

@@ -6,7 +6,7 @@ import {
   Ticket, Compass, Calendar, MapPin, 
   Sparkles, CheckCircle2, QrCode, ArrowRight, 
   ExternalLink, Building2, Search, Filter, 
-  Download, Users, Layers, X, ShieldCheck
+  Download, Users, Layers, X, ShieldCheck, Lock, Clock
 } from "lucide-react";
 import QRCode from "qrcode";
 import { useLanguage } from "../lib/i18n";
@@ -404,92 +404,128 @@ export default function VisitorPortal({
               </div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {registrations.map(reg => (
-                  <div 
-                    key={reg.id}
-                    className="bg-white border border-slate-200/90 rounded-3xl shadow-lg overflow-hidden flex flex-col sm:flex-row relative"
-                  >
-                    {/* Left: Event Details */}
-                    <div className="flex-1 p-6 sm:p-7 flex flex-col justify-between border-b sm:border-b-0 sm:border-r border-slate-150">
-                      <div>
-                        <div className="flex items-center gap-2 mb-3">
-                          <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold uppercase tracking-wider">
-                            {reg.ticketType || "VIP Access Pass"}
-                          </span>
-                          <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-1">
-                            <CheckCircle2 size={12} /> Confirmed
-                          </span>
+                {registrations.map(reg => {
+                  const isPending = reg.status === "pending" || Boolean(reg.requiresApproval);
+
+                  return (
+                    <div 
+                      key={reg.id}
+                      className={`bg-white border rounded-3xl shadow-lg overflow-hidden flex flex-col sm:flex-row relative ${
+                        isPending ? "border-amber-200/90" : "border-slate-200/90"
+                      }`}
+                    >
+                      {/* Left: Event Details */}
+                      <div className="flex-1 p-6 sm:p-7 flex flex-col justify-between border-b sm:border-b-0 sm:border-r border-slate-150">
+                        <div>
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-800 border border-slate-200 text-[10px] font-extrabold uppercase tracking-wider">
+                              {reg.ticketType || "VIP Access Pass"}
+                            </span>
+                            {isPending ? (
+                              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 flex items-center gap-1">
+                                <Clock size={11} className="stroke-[2.5]" /> Pending Review
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                                <CheckCircle2 size={12} /> Confirmed
+                              </span>
+                            )}
+                          </div>
+
+                          <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-snug mb-2">
+                            {reg.eventTitle}
+                          </h3>
+
+                          <div className="space-y-1.5 text-xs text-slate-600 font-medium mb-4">
+                            <div className="flex items-center gap-2">
+                              <Calendar size={13} className="text-emerald-600 shrink-0" />
+                              <span>{reg.startDate} — {reg.endDate}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <MapPin size={13} className="text-emerald-600 shrink-0" />
+                              <span className="truncate">{reg.location}</span>
+                            </div>
+                          </div>
                         </div>
 
-                        <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-snug mb-2">
-                          {reg.eventTitle}
-                        </h3>
-
-                        <div className="space-y-1.5 text-xs text-slate-600 font-medium mb-4">
-                          <div className="flex items-center gap-2">
-                            <Calendar size={13} className="text-emerald-600 shrink-0" />
-                            <span>{reg.startDate} — {reg.endDate}</span>
+                        {/* Attendee Info & Shortcuts */}
+                        <div className="pt-4 border-t border-slate-100 flex flex-col gap-3">
+                          <div className="flex items-center justify-between text-xs">
+                            <div>
+                              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Attendee Name</span>
+                              <span className="font-bold text-slate-800">{user?.fullName || "Attendee"}</span>
+                            </div>
+                            <div>
+                              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Badge Status</span>
+                              <span className={`font-mono font-bold ${isPending ? "text-amber-700 text-[11px]" : "text-indigo-600"}`}>
+                                {isPending ? "Pending Review" : (reg.badgeCode || "PASS-VIP-9824XA")}
+                              </span>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <MapPin size={13} className="text-emerald-600 shrink-0" />
-                            <span className="truncate">{reg.location}</span>
+
+                          <div className="flex items-center gap-2 pt-1">
+                            <button
+                              onClick={() => onViewFloorPlan && onViewFloorPlan(reg.eventId)}
+                              className="flex-1 py-2 px-3 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-[10px] font-bold border border-slate-200 transition-colors cursor-pointer"
+                            >
+                              View Floor Plan
+                            </button>
+
+                            <button
+                              onClick={() => onViewLivePage && onViewLivePage(reg.eventId)}
+                              className="flex-1 py-2 px-3 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-[10px] font-bold border border-slate-200 transition-colors cursor-pointer"
+                            >
+                              Live Page
+                            </button>
                           </div>
                         </div>
                       </div>
 
-                      {/* Attendee Info & Shortcuts */}
-                      <div className="pt-4 border-t border-slate-100 flex flex-col gap-3">
-                        <div className="flex items-center justify-between text-xs">
-                          <div>
-                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Attendee Name</span>
-                            <span className="font-bold text-slate-800">{user?.fullName || "Attendee"}</span>
-                          </div>
-                          <div>
-                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Badge ID</span>
-                            <span className="font-mono font-bold text-indigo-600">{reg.badgeCode || "PASS-VIP-9824XA"}</span>
-                          </div>
-                        </div>
+                      {/* Right: QR Code Pass Badge or Pending Locked State */}
+                      <div className="w-full sm:w-52 bg-slate-900 p-6 flex flex-col items-center justify-center text-center text-white relative">
+                        {isPending ? (
+                          <>
+                            <span className="text-[9px] font-extrabold uppercase tracking-widest text-amber-400 mb-3 flex items-center gap-1">
+                              <Clock size={12} /> Under Review
+                            </span>
 
-                        <div className="flex items-center gap-2 pt-1">
-                          <button
-                            onClick={() => onViewFloorPlan && onViewFloorPlan(reg.eventId)}
-                            className="flex-1 py-2 px-3 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-[10px] font-bold border border-slate-200 transition-colors cursor-pointer"
-                          >
-                            View Floor Plan
-                          </button>
+                            {/* Locked QR Box */}
+                            <div className="w-32 h-32 bg-slate-800/90 border border-amber-500/30 p-2 rounded-2xl shadow-inner flex flex-col items-center justify-center text-amber-400 gap-1 text-center select-none">
+                              <Lock size={28} className="stroke-[2.2] mb-0.5" />
+                              <span className="text-[9px] font-black uppercase tracking-tight text-amber-300">QR Locked</span>
+                              <span className="text-[8px] text-slate-400 leading-tight">Activates when approved</span>
+                            </div>
 
-                          <button
-                            onClick={() => onViewLivePage && onViewLivePage(reg.eventId)}
-                            className="flex-1 py-2 px-3 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-[10px] font-bold border border-slate-200 transition-colors cursor-pointer"
-                          >
-                            Live Page
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Right: QR Code Pass Badge */}
-                    <div className="w-full sm:w-52 bg-slate-900 p-6 flex flex-col items-center justify-center text-center text-white relative">
-                      <span className="text-[9px] font-extrabold uppercase tracking-widest text-emerald-400 mb-3 flex items-center gap-1">
-                        <ShieldCheck size={12} /> Door Pass
-                      </span>
-
-                      {/* Rendered QR Code */}
-                      <div className="w-32 h-32 bg-white p-2 rounded-2xl shadow-inner flex items-center justify-center">
-                        {qrCodeUrls[reg.id] ? (
-                          <img src={qrCodeUrls[reg.id]} alt="QR Pass" className="w-full h-full" />
+                            <span className="text-[10px] font-mono text-amber-400 font-bold mt-3">
+                              STATUS: PENDING
+                            </span>
+                            <span className="text-[9px] text-slate-400 mt-0.5">Awaiting organizer review</span>
+                          </>
                         ) : (
-                          <QrCode size={48} className="text-slate-800 animate-pulse" />
+                          <>
+                            <span className="text-[9px] font-extrabold uppercase tracking-widest text-emerald-400 mb-3 flex items-center gap-1">
+                              <ShieldCheck size={12} /> Door Pass
+                            </span>
+
+                            {/* Rendered QR Code */}
+                            <div className="w-32 h-32 bg-white p-2 rounded-2xl shadow-inner flex items-center justify-center">
+                              {qrCodeUrls[reg.id] ? (
+                                <img src={qrCodeUrls[reg.id]} alt="QR Pass" className="w-full h-full" />
+                              ) : (
+                                <QrCode size={48} className="text-slate-800 animate-pulse" />
+                              )}
+                            </div>
+
+                            <span className="text-[10px] font-mono text-slate-400 font-bold mt-3">
+                              {reg.badgeCode || "PASS-VIP-9824XA"}
+                            </span>
+                            <span className="text-[9px] text-slate-500 mt-0.5">Scan at entrance</span>
+                          </>
                         )}
                       </div>
-
-                      <span className="text-[10px] font-mono text-slate-400 font-bold mt-3">
-                        {reg.badgeCode || "PASS-VIP-9824XA"}
-                      </span>
-                      <span className="text-[9px] text-slate-500 mt-0.5">Scan at entrance</span>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

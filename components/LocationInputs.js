@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { Globe, MapPin, ChevronDown } from "lucide-react";
+import React, { useState, useMemo, useEffect } from "react";
+import { Globe, MapPin, ChevronDown, Loader2 } from "lucide-react";
 import { COUNTRIES } from "./CountryPhoneInput";
-import { getCitiesForCountry } from "../lib/formPresets";
+import { getCitiesForCountry, fetchCitiesForCountryOnline } from "../lib/formPresets";
 
 export function CountrySelect({
   value = "",
@@ -25,7 +25,7 @@ export function CountrySelect({
         <option value="">{placeholder}</option>
         {COUNTRIES.map((c) => (
           <option key={c.code} value={c.name}>
-            {c.flag} {c.name}
+            {c.name}
           </option>
         ))}
       </select>
@@ -45,14 +45,41 @@ export function CitySelect({
   placeholder = "Select or enter your city...",
   className = ""
 }) {
-  const citySuggestions = useMemo(() => {
-    return getCitiesForCountry(country);
-  }, [country]);
-
+  const [dynamicCities, setDynamicCities] = useState([]);
+  const [isLoadingCities, setIsLoadingCities] = useState(false);
   const [isCustomCity, setIsCustomCity] = useState(false);
 
-  // If there are preset cities for the country and user hasn't switched to custom typing
-  if (citySuggestions.length > 0 && !isCustomCity) {
+  // Sync cities when country changes
+  useEffect(() => {
+    const targetCountry = country || "Algeria";
+    const localList = getCitiesForCountry(targetCountry);
+    setDynamicCities(localList);
+
+    // Fetch complete catalog online if available
+    let isCancelled = false;
+    setIsLoadingCities(true);
+    fetchCitiesForCountryOnline(targetCountry)
+      .then(cities => {
+        if (!isCancelled && Array.isArray(cities) && cities.length > 0) {
+          setDynamicCities(cities);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!isCancelled) setIsLoadingCities(false);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [country]);
+
+  const cityOptions = useMemo(() => {
+    return dynamicCities.length > 0 ? dynamicCities : getCitiesForCountry(country || "Algeria");
+  }, [dynamicCities, country]);
+
+  // If there are cities for the country and user hasn't switched to custom typing
+  if (cityOptions.length > 0 && !isCustomCity) {
     return (
       <div className={`relative ${className}`}>
         <select
@@ -69,14 +96,17 @@ export function CitySelect({
           disabled={disabled}
           className="w-full pl-3.5 pr-9 py-2.5 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-semibold text-slate-900 outline-none transition-all cursor-pointer appearance-none shadow-2xs"
         >
-          <option value="">{placeholder || (country ? `Select city in ${country}...` : "Select city...")}</option>
-          {citySuggestions.map((city, idx) => (
+          <option value="">
+            {placeholder || (country ? `Select city in ${country}...` : "Select city...")}
+          </option>
+          {cityOptions.map((city, idx) => (
             <option key={idx} value={city}>
               {city}
             </option>
           ))}
         </select>
-        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 flex items-center gap-1">
+          {isLoadingCities && <Loader2 size={12} className="animate-spin text-blue-500" />}
           <ChevronDown size={14} />
         </div>
       </div>
@@ -96,9 +126,9 @@ export function CitySelect({
         disabled={disabled}
         className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-semibold text-slate-900 outline-none transition-all shadow-2xs"
       />
-      {citySuggestions.length > 0 && (
+      {cityOptions.length > 0 && (
         <datalist id="cities-datalist">
-          {citySuggestions.map((city, idx) => (
+          {cityOptions.map((city, idx) => (
             <option key={idx} value={city} />
           ))}
         </datalist>

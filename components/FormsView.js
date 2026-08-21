@@ -11,32 +11,45 @@ import {
   Radio, Calendar, Hash, Type, AlignLeft, Mail, Phone,
   QrCode, Award, UserCheck, AlertCircle, X, Layers, RefreshCw,
   Lock, Archive, RotateCcw, Globe, MapPin, Camera, Users,
-  Briefcase, Megaphone, Target
+  Briefcase, Megaphone, Target, Presentation, FileSpreadsheet, Paperclip,
+  Pencil
 } from "lucide-react";
 import QRCode from "qrcode";
 import CountryPhoneInput from "./CountryPhoneInput";
 import { CountrySelect, CitySelect } from "./LocationInputs";
 import FormImageUploader from "./FormImageUploader";
-import { PRESET_SMART_FIELDS } from "../lib/formPresets";
+import FormFileUploader, { formatFileSize } from "./FormFileUploader";
+import { PRESET_SMART_FIELDS, getFormSections } from "../lib/formPresets";
 
 // Available field types in the toolbox
 const FIELD_TYPES = [
+  // Standard Elements
   { type: "text", label: "Short Text", icon: Type, description: "Single line input for names, titles, URLs", category: "Standard" },
   { type: "textarea", label: "Paragraph", icon: AlignLeft, description: "Multi-line text for feedback and notes", category: "Standard" },
   { type: "phone", label: "Phone Number", icon: Phone, description: "International phone with country code selector", category: "Standard" },
-  { type: "country", label: "Country Selector", icon: Globe, description: "Searchable country selector with flags", category: "Standard" },
+  { type: "country", label: "Country Selector", icon: Globe, description: "Searchable country selector (all world countries)", category: "Standard" },
   { type: "city", label: "City", icon: MapPin, description: "Dynamic city dropdown linked to selected country", category: "Standard" },
-  { type: "picture", label: "Photo / Picture Upload", icon: Camera, description: "Upload from mobile camera or PC file", category: "Standard" },
+  { type: "picture", label: "Badge Picture", icon: Camera, description: "Attendee photo displayed and printed on the official badge", category: "Standard" },
   { type: "email", label: "Email Address", icon: Mail, description: "Validated email input", category: "Standard" },
   { type: "number", label: "Number", icon: Hash, description: "Numeric values, age, quantities", category: "Standard" },
   { type: "date", label: "Date Picker", icon: Calendar, description: "Calendar date selection", category: "Standard" },
+
+  // Files & Documents Elements (Max 10 MB limit)
+  { type: "pdf", label: "PDF Document", icon: FileText, description: "Upload PDF files (.pdf) up to 10 MB", category: "Files & Docs" },
+  { type: "pptx", label: "PowerPoint Presentation", icon: Presentation, description: "Upload presentation decks (.pptx, .ppt) up to 10 MB", category: "Files & Docs" },
+  { type: "excel", label: "Excel Spreadsheet", icon: FileSpreadsheet, description: "Upload spreadsheets (.xlsx, .xls) up to 10 MB", category: "Files & Docs" },
+  { type: "csv", label: "CSV Data File", icon: FileSpreadsheet, description: "Upload data files (.csv) up to 10 MB", category: "Files & Docs" },
+  { type: "word", label: "Word Document", icon: FileText, description: "Upload text documents (.docx, .doc) up to 10 MB", category: "Files & Docs" },
+  { type: "file", label: "Any Document / Attachment", icon: Paperclip, description: "Upload PDF, Word, Excel, PPT, ZIP up to 10 MB", category: "Files & Docs" },
+
+  // Choices & Feedback
   { type: "select", label: "Dropdown Menu", icon: ChevronDown, description: "Single option from a dropdown list", category: "Choices" },
   { type: "radio", label: "Single Choice", icon: Radio, description: "Radio buttons where one option is selected", category: "Choices" },
   { type: "checkbox", label: "Checkboxes", icon: CheckSquare, description: "Multi-select list of checkboxes", category: "Choices" },
   { type: "switch", label: "Yes / No Toggle", icon: ToggleRight, description: "Boolean switch for consent or opt-in", category: "Choices" },
   { type: "rating", label: "5-Star Rating", icon: Star, description: "Interactive 1 to 5 star rating for reviews", category: "Feedback" },
   { type: "nps", label: "NPS Scale (0-10)", icon: BarChart2, description: "Net Promoter Score recommendation scale", category: "Feedback" },
-  { type: "section", label: "Section Header", icon: Layers, description: "Section title and description divider", category: "Layout" },
+  { type: "section", label: "Section Header", icon: Layers, description: "Splits form into multi-page steps with Next & Back", category: "Layout" },
 ];
 
 // Core identity fields that are permanently locked and required in every form
@@ -95,81 +108,6 @@ export function ensureCoreLockedFields(fields = []) {
   return [...missing, ...sanitized];
 }
 
-const PRESET_TEMPLATES = [
-  {
-    id: "tpl_ticket_reg",
-    title: "Attendee Badge & Ticket Intake",
-    description: "Standard attendee onboarding with dietary restrictions, job role, t-shirt size, and networking consent.",
-    type: "ticket_registration",
-    category: "Ticket Registration",
-    fields: [
-      ...CORE_LOCKED_FIELDS,
-      { id: "f_job", type: "text", label: "Job Title / Role", placeholder: "e.g. Chief Legal Officer", required: true, options: [] },
-      { id: "f_comp", type: "text", label: "Organization / Company", placeholder: "e.g. Energy Partners Ltd.", required: true, options: [] },
-      { id: "f_track", type: "select", label: "Primary Interest Track", required: true, options: ["Green Hydrogen Infrastructure", "Energy Law & Policy", "Project Financing & Bilateral Offtake", "Port Logistics"] },
-      { id: "f_diet", type: "radio", label: "Dietary Preferences", required: false, options: ["Standard (Halal)", "Vegetarian / Vegan", "Gluten-Free", "No Restrictions"] },
-      { id: "f_tshirt", type: "select", label: "T-Shirt Size", required: false, options: ["Small (S)", "Medium (M)", "Large (L)", "XL", "2XL"] },
-      { id: "f_network", type: "switch", label: "Include in Attendee Networking Directory", required: false, defaultValue: true, options: [] }
-    ]
-  },
-  {
-    id: "tpl_post_event_csat",
-    title: "Post-Event CSAT & Experience Survey",
-    description: "Comprehensive satisfaction evaluation with 5-star ratings, NPS calculation, and open feedback.",
-    type: "feedback_survey",
-    category: "Feedback & Survey",
-    fields: [
-      ...CORE_LOCKED_FIELDS,
-      { id: "f_overall", type: "rating", label: "Overall Event Experience", helpText: "1 = Poor, 5 = Outstanding", maxRating: 5, required: true, options: [] },
-      { id: "f_content", type: "rating", label: "Keynotes & Content Quality", helpText: "Relevance, depth, and presentation value", maxRating: 5, required: true, options: [] },
-      { id: "f_venue", type: "rating", label: "Venue Facilities & Organization", helpText: "Logistics, check-in flow, and catering", maxRating: 5, required: false, options: [] },
-      { id: "f_nps", type: "nps", label: "How likely are you to recommend this summit to a colleague?", helpText: "0 (Not likely) to 10 (Extremely likely)", required: true, options: [] },
-      { id: "f_highlight", type: "textarea", label: "What was your main highlight or key takeaway?", placeholder: "Tell us what inspired you most...", required: false, options: [] },
-      { id: "f_suggestions", type: "textarea", label: "How can we improve future editions?", placeholder: "Your honest suggestions...", required: false, options: [] }
-    ]
-  },
-  {
-    id: "tpl_speaker_eval",
-    title: "Speaker & Session Rating Form",
-    description: "Targeted evaluation form for individual breakout sessions and keynote presentations.",
-    type: "session_survey",
-    category: "Session Reviews",
-    fields: [
-      ...CORE_LOCKED_FIELDS,
-      { id: "f_spk_rating", type: "rating", label: "Speaker Presentation Score", maxRating: 5, required: true, options: [] },
-      { id: "f_topic_depth", type: "select", label: "Technical Depth of the Talk", required: true, options: ["Too Introductory", "Just Right / Balanced", "Very Advanced"] },
-      { id: "f_takeaways", type: "textarea", label: "Key Learnings & Notes", placeholder: "What will you apply in your work?", required: false, options: [] },
-      { id: "f_qa_questions", type: "textarea", label: "Follow-up Questions for the Speaker", placeholder: "Questions to forward to the presenter...", required: false, options: [] }
-    ]
-  },
-  {
-    id: "tpl_call_for_papers",
-    title: "Call for Papers & Speaker Application",
-    description: "Collect talk proposals, speaker bios, and abstracts for your conference agenda committee.",
-    type: "general_inquiry",
-    category: "Call for Speakers",
-    fields: [
-      ...CORE_LOCKED_FIELDS,
-      { id: "f_talk_title", type: "text", label: "Proposed Presentation Title", placeholder: "Clear, engaging talk title...", required: true, options: [] },
-      { id: "f_abstract", type: "textarea", label: "Abstract / Synopsis (250-500 words)", placeholder: "Overview of findings and audience value...", required: true, options: [] },
-      { id: "f_bio", type: "textarea", label: "Speaker Biography & Previous Talks", placeholder: "Brief bio and video/presentation links...", required: true, options: [] }
-    ]
-  },
-  {
-    id: "tpl_sponsor_inquiry",
-    title: "Sponsor & Exhibitor Inquiry Form",
-    description: "Lead capture for companies interested in sponsoring booths, lunches, and brand placements.",
-    type: "general_inquiry",
-    category: "Sponsorship",
-    fields: [
-      ...CORE_LOCKED_FIELDS,
-      { id: "f_sp_company", type: "text", label: "Company / Brand Name", required: true, options: [] },
-      { id: "f_sp_tier", type: "select", label: "Target Sponsorship Tier", required: true, options: ["Platinum Title Partner ($25,000)", "Gold Track Sponsor ($15,000)", "Silver Booth Exhibitor ($7,500)", "Networking Reception Sponsor ($5,000)"] },
-      { id: "f_sp_goals", type: "checkbox", label: "Main Objectives", required: false, options: ["Brand Visibility & PR", "Direct B2B Lead Generation", "Executive Networking", "Talent Recruitment"] }
-    ]
-  }
-];
-
 export default function FormsView({
   forms = [],
   submissions = [],
@@ -190,9 +128,6 @@ export default function FormsView({
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedStatus, setSelectedStatus] = useState("All");
 
-  // Template Modal
-  const [templateModalOpen, setTemplateModalOpen] = useState(false);
-
   // Share / QR Modal
   const [shareModalForm, setShareModalForm] = useState(null);
   const [shareQrUrl, setShareQrUrl] = useState("");
@@ -204,6 +139,47 @@ export default function FormsView({
   const [previewDevice, setPreviewDevice] = useState("desktop"); // "desktop" | "mobile"
   const [previewAnswers, setPreviewAnswers] = useState({});
   const [previewSubmitted, setPreviewSubmitted] = useState(false);
+  const [previewSectionIdx, setPreviewSectionIdx] = useState(0);
+  const [previewSectionErrors, setPreviewSectionErrors] = useState({});
+
+  // Multi-page form sections parsed from fields
+  const formSections = useMemo(() => {
+    return getFormSections(editingForm?.fields || []);
+  }, [editingForm?.fields]);
+
+  const safeSectionIdx = Math.min(previewSectionIdx, Math.max(0, formSections.length - 1));
+  const currentSec = formSections[safeSectionIdx] || formSections[0] || { fields: [] };
+  const isLastSection = safeSectionIdx === formSections.length - 1;
+  const isFirstSection = safeSectionIdx === 0;
+  const isMultiSection = formSections.length > 1;
+
+  // Question Card Accordion Collapse/Expand States in Canvas
+  const [collapsedFields, setCollapsedFields] = useState({});
+
+  const toggleFieldCollapse = (fieldId) => {
+    setCollapsedFields(prev => ({
+      ...prev,
+      [fieldId]: !prev[fieldId]
+    }));
+  };
+
+  const collapseAllFields = () => {
+    const all = {};
+    (editingForm?.fields || []).forEach(f => {
+      all[f.id] = true;
+    });
+    setCollapsedFields(all);
+  };
+
+  const expandAllFields = () => {
+    setCollapsedFields({});
+  };
+
+  const areAllCollapsed = useMemo(() => {
+    const fields = editingForm?.fields || [];
+    if (fields.length === 0) return false;
+    return fields.every(f => Boolean(collapsedFields[f.id]));
+  }, [editingForm?.fields, collapsedFields]);
 
   const onSaveFormRef = useRef(onSaveForm);
   useEffect(() => {
@@ -293,10 +269,20 @@ export default function FormsView({
     });
   }, [forms, searchQuery, selectedCategory, selectedStatus]);
 
+function generateUuid() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
   // Handle Opening Builder with Blank or Existing Form
   const handleOpenCreateBlank = () => {
     const newForm = {
-      id: `form-${Date.now()}`,
+      id: generateUuid(),
       title: "New Custom Form",
       description: "Enter instructions or context for this form...",
       type: "ticket_registration",
@@ -312,33 +298,6 @@ export default function FormsView({
     };
     setEditingForm(newForm);
     setActiveFormId(newForm.id);
-    setViewMode("builder");
-    setBuilderTab("fields");
-    if (onSaveForm) onSaveForm(newForm);
-  };
-
-  const handleOpenTemplate = (template) => {
-    const newForm = {
-      id: `form-${Date.now()}`,
-      title: template.title,
-      description: template.description,
-      type: template.type,
-      ticketId: "all",
-      status: "active",
-      settings: {
-        submitButtonText: template.type === "ticket_registration" ? "Complete Registration" : "Submit Feedback",
-        successMessage: "Thank you! Your submission has been saved.",
-        allowAnonymous: template.type === "feedback_survey",
-        accentColor: template.type === "ticket_registration" ? "blue" : "indigo"
-      },
-      fields: ensureCoreLockedFields(template.fields.map((f, idx) => ({
-        ...f,
-        id: f.id.startsWith("f_core_") ? f.id : `f_${Date.now()}_${idx}`
-      })))
-    };
-    setEditingForm(newForm);
-    setActiveFormId(newForm.id);
-    setTemplateModalOpen(false);
     setViewMode("builder");
     setBuilderTab("fields");
     if (onSaveForm) onSaveForm(newForm);
@@ -365,11 +324,21 @@ export default function FormsView({
   const handleDuplicateForm = (form) => {
     const cloned = {
       ...JSON.parse(JSON.stringify(form)),
-      id: `form-${Date.now()}`,
+      id: generateUuid(),
       title: `${form.title} (Copy)`,
       createdAt: new Date().toISOString()
     };
     if (onSaveForm) onSaveForm(cloned);
+  };
+
+
+  const handleBackToHub = () => {
+    if (editingForm && onSaveForm) {
+      onSaveForm(editingForm);
+    }
+    setViewMode("hub");
+    setEditingForm(null);
+    setActiveFormId(null);
   };
 
   const handleSaveCurrentForm = () => {
@@ -381,13 +350,16 @@ export default function FormsView({
   const handleAddField = (type) => {
     if (!editingForm) return;
     const typeDef = FIELD_TYPES.find(t => t.type === type) || FIELD_TYPES[0];
+    const isSection = type === "section";
+    const existingSectionsCount = (editingForm.fields || []).filter(f => f.type === "section").length;
+
     const newField = {
-      id: `field_${Date.now()}`,
+      id: isSection ? `f_sec_${Date.now()}` : `field_${Date.now()}`,
       type: type,
-      label: type === "section" ? "Section Title" : `New ${typeDef.label}`,
-      placeholder: type === "text" ? "Type answer here..." : "",
-      helpText: "",
-      required: type !== "section",
+      label: isSection ? `Section ${existingSectionsCount + 2}: Section Title` : `New ${typeDef.label}`,
+      placeholder: isSection ? "" : (type === "text" ? "Type answer here..." : ""),
+      helpText: isSection ? "Section instructions or description..." : "",
+      required: false,
       options: ["select", "radio", "checkbox"].includes(type) 
         ? ["Option 1", "Option 2", "Option 3"] 
         : [],
@@ -570,9 +542,68 @@ export default function FormsView({
     document.body.removeChild(link);
   };
 
-  // Live Test Form Submission in Preview
+  // Live Test Form Navigation & Submission in Preview
+  const handlePreviewNextSection = (e) => {
+    e?.preventDefault?.();
+    const safeIdx = Math.min(previewSectionIdx, Math.max(0, formSections.length - 1));
+    const currentSec = formSections[safeIdx];
+    if (!currentSec) return;
+
+    // Validate required fields in the current section
+    const errors = {};
+    (currentSec.fields || []).forEach(f => {
+      if (f.required && f.type !== "section") {
+        const val = previewAnswers[f.id];
+        const isEmpty = val === undefined || val === null || val === "" || (Array.isArray(val) && val.length === 0);
+        if (isEmpty) {
+          errors[f.id] = "This question requires an answer.";
+        }
+      }
+    });
+
+    if (Object.keys(errors).length > 0) {
+      setPreviewSectionErrors(errors);
+      return;
+    }
+
+    setPreviewSectionErrors({});
+    setPreviewSectionIdx(prev => Math.min(formSections.length - 1, prev + 1));
+  };
+
+  const handlePreviewPrevSection = () => {
+    setPreviewSectionErrors({});
+    setPreviewSectionIdx(prev => Math.max(0, prev - 1));
+  };
+
+  const handlePreviewClearForm = () => {
+    setPreviewAnswers({});
+    setPreviewSectionErrors({});
+    setPreviewSectionIdx(0);
+  };
+
   const handlePreviewSubmit = (e) => {
     e.preventDefault();
+    const safeIdx = Math.min(previewSectionIdx, Math.max(0, formSections.length - 1));
+    const currentSec = formSections[safeIdx];
+
+    // Validate required fields in final section
+    const errors = {};
+    (currentSec?.fields || []).forEach(f => {
+      if (f.required && f.type !== "section") {
+        const val = previewAnswers[f.id];
+        const isEmpty = val === undefined || val === null || val === "" || (Array.isArray(val) && val.length === 0);
+        if (isEmpty) {
+          errors[f.id] = "This question requires an answer.";
+        }
+      }
+    });
+
+    if (Object.keys(errors).length > 0) {
+      setPreviewSectionErrors(errors);
+      return;
+    }
+
+    setPreviewSectionErrors({});
     setPreviewSubmitted(true);
     if (onSubmitResponse && editingForm) {
       onSubmitResponse({
@@ -592,86 +623,107 @@ export default function FormsView({
     return (
       <div className="flex flex-col gap-6 w-full pb-16 animate-fade-in">
         {/* Top Header */}
-        <header className="flex flex-wrap items-center justify-between gap-4 py-1">
-          {/* Left: Form Title & Meta Info */}
-          <div className="flex items-center gap-3">
-            <div>
-              <div className="flex items-center gap-2.5">
+        <header className="flex flex-wrap items-center justify-between gap-4 py-2 border-b border-slate-200/80 pb-4">
+          {/* Left: Simple Go Back Arrow + Form Title & Meta Info */}
+          <div className="flex items-center gap-1.5 min-w-[220px]">
+            <button
+              type="button"
+              onClick={handleBackToHub}
+              className="p-1 -ml-1 text-slate-400 hover:text-slate-900 hover:bg-slate-100/80 rounded-lg transition-colors cursor-pointer shrink-0"
+              title="Back to Forms list"
+              aria-label="Back to Forms list"
+            >
+              <ArrowLeft size={18} />
+            </button>
+
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-center gap-2 flex-wrap">
                 <input
                   type="text"
                   value={editingForm.title}
                   onChange={(e) => setEditingForm(prev => ({ ...prev, title: e.target.value }))}
-                  className="text-lg sm:text-xl font-bold text-slate-900 bg-transparent hover:bg-slate-100/80 focus:bg-white focus:ring-2 focus:ring-blue-500 rounded-xl px-2.5 py-1 -ml-2.5 outline-none transition-all"
+                  className="text-lg sm:text-xl font-bold text-slate-900 bg-transparent hover:bg-slate-100/80 focus:bg-white focus:ring-2 focus:ring-blue-500 rounded-xl px-2 py-0.5 outline-none transition-all"
                   placeholder="Untitled Form"
                 />
-                <span className={`text-[10px] font-extrabold uppercase tracking-wide px-2.5 py-0.5 rounded-full shrink-0 ${
-                  editingForm.type === "ticket_registration" ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60" :
-                  editingForm.type === "feedback_survey" ? "bg-violet-50 text-violet-700 border border-violet-200/60" :
-                  editingForm.type === "session_survey" ? "bg-amber-50 text-amber-700 border border-amber-200/60" :
-                  "bg-blue-50 text-blue-700 border border-blue-200/60"
-                }`}>
-                  {editingForm.type.replace(/_/g, " ")}
-                </span>
               </div>
-              <p className="text-[11px] text-slate-400 font-medium mt-0.5">
-                {editingForm.fields?.length || 0} Questions · {activeSubmissions.length} Submissions Received
-              </p>
+              <div className="flex items-center gap-2 text-[11px] text-slate-400 font-medium px-2">
+                <span>{editingForm.fields?.length || 0} Questions</span>
+                <span>•</span>
+                <span>{activeSubmissions.length} Submissions</span>
+              </div>
             </div>
           </div>
 
-          {/* Center: Builder Navigation Tabs */}
-          <div className="flex items-center bg-slate-100/90 p-1 rounded-2xl border border-slate-200/60">
-            <button
-              onClick={() => setBuilderTab("fields")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                builderTab === "fields" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              Questions Builder
-            </button>
+          {/* Right: Builder Navigation Tabs & Actions */}
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <div className="flex items-center bg-slate-100/90 p-1 rounded-2xl border border-slate-200/60 shadow-2xs">
+              {/* Questions Tab */}
+              <button
+                onClick={() => setBuilderTab("fields")}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  builderTab === "fields" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <FileText size={13} />
+                <span>Questions</span>
+              </button>
 
-            <button
-              onClick={() => setBuilderTab("settings")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                builderTab === "settings" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              Form Settings
-            </button>
+              {/* Responses Tab */}
+              <button
+                onClick={() => setBuilderTab("submissions")}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  builderTab === "submissions" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <BarChart2 size={13} />
+                <span>Responses</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
+                  builderTab === "submissions" ? "bg-blue-100 text-blue-700" : "bg-slate-200/80 text-slate-600"
+                }`}>
+                  {activeSubmissions.length}
+                </span>
+              </button>
 
-            <button
-              onClick={() => {
-                setBuilderTab("preview");
-                setPreviewSubmitted(false);
-                setPreviewAnswers({});
-              }}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                builderTab === "preview" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              Live Simulator
-            </button>
+              <div className="w-px h-4 bg-slate-200 mx-1"></div>
 
-            <button
-              onClick={() => setBuilderTab("submissions")}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                builderTab === "submissions" ? "bg-white text-blue-600 shadow-xs" : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              Responses ({activeSubmissions.length})
-            </button>
-          </div>
+              {/* Form Settings (Icon Only) */}
+              <button
+                onClick={() => setBuilderTab("settings")}
+                className={`p-2 rounded-xl text-xs font-bold transition-all cursor-pointer relative group ${
+                  builderTab === "settings" ? "bg-white text-blue-600 shadow-xs" : "text-slate-500 hover:text-slate-900 hover:bg-white/50"
+                }`}
+                title="Form Settings"
+                aria-label="Form Settings"
+              >
+                <Settings size={15} />
+              </button>
 
-          {/* Right: Share & QR Action */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => handleOpenShare(editingForm)}
-              className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shadow-2xs"
-              title="Share / QR Code"
-            >
-              <Share2 size={14} />
-              <span>Share & QR</span>
-            </button>
+              {/* Live Simulator (Icon Only) */}
+              <button
+                onClick={() => {
+                  setBuilderTab("preview");
+                  setPreviewSubmitted(false);
+                  setPreviewAnswers({});
+                }}
+                className={`p-2 rounded-xl text-xs font-bold transition-all cursor-pointer relative group ${
+                  builderTab === "preview" ? "bg-white text-blue-600 shadow-xs" : "text-slate-500 hover:text-slate-900 hover:bg-white/50"
+                }`}
+                title="Live Simulator Preview"
+                aria-label="Live Simulator"
+              >
+                <Eye size={15} />
+              </button>
+
+              {/* Share & QR (Icon Only) */}
+              <button
+                onClick={() => handleOpenShare(editingForm)}
+                className="p-2 rounded-xl text-xs font-bold transition-all cursor-pointer text-slate-500 hover:text-slate-900 hover:bg-white/50 relative group"
+                title="Share & QR Code"
+                aria-label="Share & QR Code"
+              >
+                <Share2 size={15} />
+              </button>
+            </div>
           </div>
         </header>
 
@@ -683,9 +735,8 @@ export default function FormsView({
             {/* Left Column: Toolbox to Add Fields */}
             <div className="lg:col-span-4 bg-white border border-slate-200 rounded-3xl p-6 shadow-xs flex flex-col gap-5 sticky top-28">
               <div>
-                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  <Sparkles size={16} className="text-blue-600" />
-                  <span>Question Elements</span>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Question Elements
                 </h3>
                 <p className="text-xs text-slate-500 mt-1">
                   Click any element to append it to your form.
@@ -695,12 +746,8 @@ export default function FormsView({
               {/* Pre-made Fields & Smart Suggestions */}
               <div className="flex flex-col gap-2.5 bg-gradient-to-b from-blue-50/80 to-indigo-50/40 p-3.5 rounded-2xl border border-blue-200/80 shadow-2xs">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-extrabold uppercase text-blue-800 tracking-wider flex items-center gap-1.5">
-                    <Sparkles size={12} className="text-blue-600" />
-                    <span>Pre-Made Smart Fields</span>
-                  </span>
-                  <span className="text-[9px] font-bold text-blue-700 bg-white px-2 py-0.5 rounded-full border border-blue-200 shadow-2xs">
-                    With Dropdowns
+                  <span className="text-[10px] font-extrabold uppercase text-blue-800 tracking-wider">
+                    Pre-Made Smart Fields
                   </span>
                 </div>
                 <div className="grid grid-cols-1 gap-1.5">
@@ -732,7 +779,7 @@ export default function FormsView({
               </div>
 
               {/* Standard Grouped Field Types */}
-              {["Standard", "Choices", "Feedback", "Layout"].map(cat => (
+              {["Standard", "Files & Docs", "Choices", "Feedback", "Layout"].map(cat => (
                 <div key={cat} className="flex flex-col gap-2">
                   <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">
                     {cat} Elements
@@ -768,24 +815,54 @@ export default function FormsView({
 
             {/* Right Column: Questions Canvas */}
             <div className="lg:col-span-8 flex flex-col gap-4">
-              {/* Form Overview Banner Card */}
-              <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs flex flex-col gap-3 relative">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-blue-700 bg-blue-50 border border-blue-100/80 px-3 py-1 rounded-full flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
-                    {editingForm.type === "ticket_registration" ? "Ticket Registration Form" : "Attendee Survey & Feedback"}
+              {/* Form Description & Instructions Card */}
+              <div className="bg-white border border-slate-200 rounded-3xl p-4 shadow-xs flex flex-col gap-2 relative">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-xs font-bold text-slate-700">
+                    Form Description & Instructions
                   </span>
-                  <span className="text-xs font-semibold text-slate-500">
-                    Linked: <span className="text-slate-800 font-bold">{editingForm.ticketId === "all" ? "All Ticket Tiers" : editingForm.ticketId}</span>
-                  </span>
+                  <span className="text-[10px] text-slate-400 font-medium">Shown to respondents at the top of the form</span>
                 </div>
                 <textarea
                   value={editingForm.description}
                   onChange={(e) => setEditingForm(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Enter instructions or context for this form..."
+                  placeholder="Enter greeting, instructions, or context for respondents..."
                   rows={2}
                   className="w-full text-xs font-medium text-slate-800 bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-blue-600 rounded-2xl p-3 outline-none placeholder:text-slate-400 transition-all resize-none shadow-2xs"
                 />
+              </div>
+
+              {/* Questions List Header with Collapse / Expand All */}
+              <div className="flex items-center justify-between px-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <ListChecks size={15} className="text-blue-600" />
+                    <span>Form Elements & Questions</span>
+                  </span>
+                  <span className="text-[10px] font-extrabold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                    {editingForm.fields?.length || 0}
+                  </span>
+                </div>
+
+                {editingForm.fields?.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={areAllCollapsed ? expandAllFields : collapseAllFields}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold shadow-2xs transition-all cursor-pointer hover:border-slate-300"
+                  >
+                    {areAllCollapsed ? (
+                      <>
+                        <ChevronDown size={13} className="text-blue-600" />
+                        <span>Expand All</span>
+                      </>
+                    ) : (
+                      <>
+                        <ChevronUp size={13} className="text-blue-600" />
+                        <span>Collapse All</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
 
               {/* Questions List */}
@@ -803,31 +880,285 @@ export default function FormsView({
                 </div>
               ) : (
                 editingForm.fields.map((field, index) => {
-                  const ftObj = FIELD_TYPES.find(t => t.type === field.type) || { label: field.type };
-                  const FieldIcon = ftObj.icon;
+                  const isLockedField = CORE_LOCKED_FIELDS.some(cf => cf.id === field.id) || field.isLocked;
+                  const fieldDef = FIELD_TYPES.find(t => t.type === field.type) || { icon: HelpCircle };
+                  const FieldIcon = fieldDef.icon;
                   const isChoice = ["select", "radio", "checkbox"].includes(field.type);
-                  const isLockedField = field.isLocked || ["f_core_name", "f_core_email", "f_core_phone"].includes(field.id);
+                  const isCollapsed = Boolean(collapsedFields[field.id]);
 
+                  if (field.type === "section") {
+                    const sectionNumber = (editingForm.fields.slice(0, index).filter(f => f.type === "section").length) + 2;
+
+                    // Collapsed Section Header Card
+                    if (isCollapsed) {
+                      return (
+                        <div
+                          key={field.id}
+                          onClick={() => toggleFieldCollapse(field.id)}
+                          className="bg-gradient-to-r from-blue-50/90 via-indigo-50/40 to-white border-2 border-dashed border-blue-300 hover:border-blue-400 rounded-2xl p-3.5 sm:px-5 sm:py-3.5 shadow-2xs flex items-center justify-between gap-3 transition-all cursor-pointer group/item"
+                        >
+                          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                            <span className="w-6 h-6 rounded-lg bg-blue-600 text-white font-extrabold text-[11px] flex items-center justify-center shrink-0 shadow-xs">
+                              §
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full bg-blue-600 text-white text-[9px] font-extrabold uppercase tracking-wider shrink-0 shadow-2xs">
+                              Page Break {sectionNumber}
+                            </span>
+                            <span className="text-xs font-bold text-blue-950 truncate">
+                              {field.label || `Section ${sectionNumber}`}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              onClick={() => handleMoveField(index, -1)}
+                              disabled={index === 0}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-white/80 disabled:opacity-30 text-xs font-bold cursor-pointer transition-colors"
+                              title="Move Up"
+                            >
+                              <ChevronUp size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMoveField(index, 1)}
+                              disabled={index === editingForm.fields.length - 1}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-white/80 disabled:opacity-30 text-xs font-bold cursor-pointer transition-colors"
+                              title="Move Down"
+                            >
+                              <ChevronDown size={14} />
+                            </button>
+                            <div className="h-4 w-px bg-blue-200 mx-1" />
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteField(field.id)}
+                              className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 cursor-pointer font-bold text-xs transition-colors"
+                              title="Delete Section Header"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleFieldCollapse(field.id)}
+                              className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-100 cursor-pointer transition-colors"
+                              title="Expand Section Header"
+                            >
+                              <ChevronDown size={15} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // Expanded Section Header Card
+                    return (
+                      <div
+                        key={field.id}
+                        className="bg-gradient-to-r from-blue-50/90 via-indigo-50/40 to-white border-2 border-dashed border-blue-300 rounded-3xl p-5 shadow-xs flex flex-col gap-3.5 relative group/item hover:border-blue-400 transition-all"
+                      >
+                        {/* Top Bar: Section Badge, Reorder, Delete, Collapse */}
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="w-6 h-6 rounded-lg bg-blue-600 text-white font-extrabold text-[11px] flex items-center justify-center shrink-0 shadow-xs">
+                              §
+                            </span>
+                            <span className="px-2.5 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-extrabold uppercase tracking-wider shadow-2xs">
+                              Page Break & Section Header
+                            </span>
+                            <span className="text-xs font-bold text-blue-900">
+                              (Starts Page {sectionNumber})
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleMoveField(index, -1)}
+                              disabled={index === 0}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-white/80 disabled:opacity-30 text-xs font-bold cursor-pointer transition-colors"
+                              title="Move Up"
+                            >
+                              <ChevronUp size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMoveField(index, 1)}
+                              disabled={index === editingForm.fields.length - 1}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-white/80 disabled:opacity-30 text-xs font-bold cursor-pointer transition-colors"
+                              title="Move Down"
+                            >
+                              <ChevronDown size={14} />
+                            </button>
+                            <div className="h-4 w-px bg-blue-200 mx-1" />
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteField(field.id)}
+                              className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 cursor-pointer font-bold text-xs transition-colors"
+                              title="Delete Section Header"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleFieldCollapse(field.id)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 cursor-pointer transition-colors"
+                              title="Collapse Section Header"
+                            >
+                              <ChevronUp size={15} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Section Title Input */}
+                        <div>
+                          <label className="block text-[10px] font-bold text-blue-900 uppercase tracking-wider mb-1">
+                            Section / Page Title <span className="text-rose-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={field.label}
+                            onChange={(e) => handleUpdateField(field.id, { label: e.target.value })}
+                            placeholder="e.g. Professional Details or Dietary Preferences"
+                            className="w-full px-3.5 py-2 bg-white border border-blue-200 focus:border-blue-600 rounded-xl text-xs font-bold text-slate-900 outline-none transition-all shadow-2xs"
+                          />
+                        </div>
+
+                        {/* Section Subtitle / HelpText Input */}
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                            Section Description / Subtitle (Optional)
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={field.helpText || ""}
+                            onChange={(e) => handleUpdateField(field.id, { helpText: e.target.value })}
+                            placeholder="Provide extra instructions or context for this step..."
+                            className="w-full px-3.5 py-2 bg-white border border-slate-200 focus:border-blue-600 rounded-xl text-xs font-medium text-slate-800 outline-none transition-all resize-none shadow-2xs"
+                          />
+                        </div>
+
+                        <div className="text-[11px] text-blue-800 font-medium bg-blue-100/60 rounded-xl p-2.5 flex items-center gap-2">
+                          <Layers size={14} className="shrink-0 text-blue-600" />
+                          <span>Respondents will fill preceding questions on Page {sectionNumber - 1}, then click <strong>Next</strong> to navigate to this section.</span>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Collapsed Question Card (Compact Row View)
+                  if (isCollapsed) {
+                    return (
+                      <div
+                        key={field.id}
+                        onClick={() => toggleFieldCollapse(field.id)}
+                        className="bg-white border border-slate-200 hover:border-slate-300 rounded-2xl p-3.5 sm:px-5 sm:py-3.5 shadow-2xs flex items-center justify-between gap-3 transition-all cursor-pointer group/item"
+                      >
+                        {/* Left: Number, Icon, Title, Badges */}
+                        <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                          <span className="w-6 h-6 rounded-lg bg-slate-100 text-slate-500 font-extrabold text-[11px] flex items-center justify-center shrink-0">
+                            {index + 1}
+                          </span>
+                          <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                            {FieldIcon && <FieldIcon size={14} />}
+                          </div>
+                          <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap sm:flex-nowrap">
+                            <span className="text-xs font-bold text-slate-800 truncate">
+                              {field.label || "Untitled Question"}
+                            </span>
+                            <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md shrink-0 hidden sm:inline-block">
+                              {fieldDef.label}
+                            </span>
+                            {isLockedField ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-[9px] font-extrabold uppercase tracking-wider shrink-0">
+                                <Lock size={9} />
+                                <span>Core Required</span>
+                              </span>
+                            ) : field.required ? (
+                              <span className="text-[9px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded-md border border-rose-200/60 shrink-0">
+                                Required
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        {/* Right: Reorder Buttons, Delete, Expand */}
+                        <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => handleMoveField(index, -1)}
+                            disabled={index === 0}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 text-xs font-bold cursor-pointer transition-colors"
+                            title="Move Up"
+                          >
+                            <ChevronUp size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMoveField(index, 1)}
+                            disabled={index === editingForm.fields.length - 1}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 text-xs font-bold cursor-pointer transition-colors"
+                            title="Move Down"
+                          >
+                            <ChevronDown size={14} />
+                          </button>
+
+                          <div className="h-4 w-px bg-slate-200 mx-1" />
+
+                          {isLockedField ? (
+                            <span
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-400 px-1.5 py-1 select-none"
+                              title="Core locked identity field"
+                            >
+                              <Lock size={12} className="text-blue-500" />
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteField(field.id)}
+                              className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 cursor-pointer font-bold text-xs transition-colors"
+                              title="Delete Question"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => toggleFieldCollapse(field.id)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 cursor-pointer transition-colors"
+                            title="Expand Question Details"
+                          >
+                            <ChevronDown size={15} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Expanded Question Card (Full Editing View)
                   return (
                     <div
                       key={field.id}
-                      className={`bg-white border rounded-3xl p-6 shadow-xs transition-all flex flex-col gap-4 relative group ${
-                        isLockedField ? "border-blue-200/90 bg-blue-50/15" : "border-slate-200 hover:border-slate-300"
-                      }`}
+                      className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs flex flex-col gap-4 relative group/item hover:border-slate-300 transition-all"
                     >
-                      {/* Top Field Badge & Controls */}
-                      <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                        <div className="flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center">
+                      {/* Top Bar: Drag Handle, Number, Title, Actions, Collapse */}
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                          <span className="w-6 h-6 rounded-lg bg-slate-100 text-slate-500 font-extrabold text-[11px] flex items-center justify-center shrink-0">
                             {index + 1}
                           </span>
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-blue-50 text-blue-700 font-bold text-xs">
-                            {FieldIcon && <FieldIcon size={12} />}
-                            <span>{ftObj.label}</span>
-                          </span>
-
+                          <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                            {FieldIcon && <FieldIcon size={14} />}
+                          </div>
+                          <input
+                            type="text"
+                            value={field.label}
+                            onChange={(e) => handleUpdateField(field.id, { label: e.target.value })}
+                            className="text-xs font-bold text-slate-800 bg-transparent hover:bg-slate-50 focus:bg-white border-b border-transparent focus:border-blue-600 rounded px-1.5 py-0.5 outline-none flex-1 transition-all"
+                            placeholder="Enter question title..."
+                          />
                           {isLockedField && (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-[10px] font-extrabold uppercase tracking-wider">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-[10px] font-extrabold uppercase tracking-wider shrink-0">
                               <Lock size={10} />
                               <span>Core Required</span>
                             </span>
@@ -837,6 +1168,7 @@ export default function FormsView({
                         <div className="flex items-center gap-1">
                           {/* Reorder Buttons */}
                           <button
+                            type="button"
                             onClick={() => handleMoveField(index, -1)}
                             disabled={index === 0}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 text-xs font-bold cursor-pointer transition-colors"
@@ -845,6 +1177,7 @@ export default function FormsView({
                             <ChevronUp size={14} />
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleMoveField(index, 1)}
                             disabled={index === editingForm.fields.length - 1}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 text-xs font-bold cursor-pointer transition-colors"
@@ -866,6 +1199,7 @@ export default function FormsView({
                             </span>
                           ) : (
                             <button
+                              type="button"
                               onClick={() => handleDeleteField(field.id)}
                               className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 cursor-pointer font-bold text-xs transition-colors"
                               title="Delete Question"
@@ -873,6 +1207,15 @@ export default function FormsView({
                               <Trash2 size={14} />
                             </button>
                           )}
+
+                          <button
+                            type="button"
+                            onClick={() => toggleFieldCollapse(field.id)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 cursor-pointer transition-colors"
+                            title="Collapse Question"
+                          >
+                            <ChevronUp size={15} />
+                          </button>
                         </div>
                       </div>
 
@@ -948,7 +1291,7 @@ export default function FormsView({
                       {field.type === "country" && (
                         <div className="flex items-center gap-3 p-3 bg-blue-50/60 border border-blue-100 rounded-2xl text-xs text-blue-900 font-semibold">
                           <Globe size={16} className="text-blue-600 shrink-0" />
-                          <span>Includes 190+ world countries with flag emojis and search autocomplete.</span>
+                          <span>Includes all 240+ world countries with instant search autocomplete.</span>
                         </div>
                       )}
 
@@ -960,11 +1303,89 @@ export default function FormsView({
                         </div>
                       )}
 
-                      {/* Photo / Picture Upload Preview Card */}
+                      {/* Badge Picture Upload Preview Card */}
                       {field.type === "picture" && (
                         <div className="flex items-center gap-3 p-3 bg-emerald-50/60 border border-emerald-100 rounded-2xl text-xs text-emerald-900 font-semibold">
                           <Camera size={16} className="text-emerald-600 shrink-0" />
-                          <span>Allows attendees to capture from mobile camera or upload from computer files.</span>
+                          <span>Attendee photo displayed and printed directly on the official conference badge.</span>
+                        </div>
+                      )}
+
+                      {/* PDF Document Preview Card */}
+                      {field.type === "pdf" && (
+                        <div className="flex items-center justify-between p-3 bg-rose-50/60 border border-rose-100 rounded-2xl text-xs text-rose-900 font-semibold">
+                          <div className="flex items-center gap-2.5">
+                            <FileText size={16} className="text-rose-600 shrink-0" />
+                            <span>PDF Document Upload (.pdf)</span>
+                          </div>
+                          <span className="text-[10px] font-bold text-rose-700 bg-white px-2.5 py-0.5 rounded-full border border-rose-200 shadow-2xs">
+                            Max 10 MB
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Word Document Preview Card */}
+                      {field.type === "word" && (
+                        <div className="flex items-center justify-between p-3 bg-blue-50/60 border border-blue-100 rounded-2xl text-xs text-blue-900 font-semibold">
+                          <div className="flex items-center gap-2.5">
+                            <FileText size={16} className="text-blue-600 shrink-0" />
+                            <span>Microsoft Word Document (.docx, .doc)</span>
+                          </div>
+                          <span className="text-[10px] font-bold text-blue-700 bg-white px-2.5 py-0.5 rounded-full border border-blue-200 shadow-2xs">
+                            Max 10 MB
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Excel Spreadsheet Preview Card */}
+                      {field.type === "excel" && (
+                        <div className="flex items-center justify-between p-3 bg-emerald-50/60 border border-emerald-100 rounded-2xl text-xs text-emerald-900 font-semibold">
+                          <div className="flex items-center gap-2.5">
+                            <FileSpreadsheet size={16} className="text-emerald-600 shrink-0" />
+                            <span>Excel Spreadsheet (.xlsx, .xls)</span>
+                          </div>
+                          <span className="text-[10px] font-bold text-emerald-700 bg-white px-2.5 py-0.5 rounded-full border border-emerald-200 shadow-2xs">
+                            Max 10 MB
+                          </span>
+                        </div>
+                      )}
+
+                      {/* CSV Data File Preview Card */}
+                      {field.type === "csv" && (
+                        <div className="flex items-center justify-between p-3 bg-teal-50/60 border border-teal-100 rounded-2xl text-xs text-teal-900 font-semibold">
+                          <div className="flex items-center gap-2.5">
+                            <FileSpreadsheet size={16} className="text-teal-600 shrink-0" />
+                            <span>CSV Data File (.csv)</span>
+                          </div>
+                          <span className="text-[10px] font-bold text-teal-700 bg-white px-2.5 py-0.5 rounded-full border border-teal-200 shadow-2xs">
+                            Max 10 MB
+                          </span>
+                        </div>
+                      )}
+
+                      {/* PowerPoint Presentation Preview Card */}
+                      {field.type === "pptx" && (
+                        <div className="flex items-center justify-between p-3 bg-amber-50/60 border border-amber-100 rounded-2xl text-xs text-amber-900 font-semibold">
+                          <div className="flex items-center gap-2.5">
+                            <Presentation size={16} className="text-amber-600 shrink-0" />
+                            <span>PowerPoint Presentation (.pptx, .ppt)</span>
+                          </div>
+                          <span className="text-[10px] font-bold text-amber-700 bg-white px-2.5 py-0.5 rounded-full border border-amber-200 shadow-2xs">
+                            Max 10 MB
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Any Document / Attachment Preview Card */}
+                      {field.type === "file" && (
+                        <div className="flex items-center justify-between p-3 bg-indigo-50/60 border border-indigo-100 rounded-2xl text-xs text-indigo-900 font-semibold">
+                          <div className="flex items-center gap-2.5">
+                            <Paperclip size={16} className="text-indigo-600 shrink-0" />
+                            <span>Supporting Document (PDF, Word, Excel, PPT, ZIP)</span>
+                          </div>
+                          <span className="text-[10px] font-bold text-indigo-700 bg-white px-2.5 py-0.5 rounded-full border border-indigo-200 shadow-2xs">
+                            Max 10 MB
+                          </span>
                         </div>
                       )}
 
@@ -1033,10 +1454,10 @@ export default function FormsView({
                   onChange={(e) => setEditingForm(prev => ({ ...prev, type: e.target.value }))}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none cursor-pointer"
                 >
-                  <option value="ticket_registration">🎟️ Ticket Registration & Checkout Intake</option>
-                  <option value="feedback_survey">⭐ Post-Event Attendee Feedback & CSAT</option>
-                  <option value="session_survey">🎤 Breakout Session / Speaker Evaluation</option>
-                  <option value="general_inquiry">📄 Call for Papers & General Inquiries</option>
+                  <option value="ticket_registration">Ticket Registration & Checkout Intake</option>
+                  <option value="feedback_survey">Post-Event Attendee Feedback & CSAT</option>
+                  <option value="session_survey">Breakout Session / Speaker Evaluation</option>
+                  <option value="general_inquiry">Call for Papers & General Inquiries</option>
                 </select>
               </div>
 
@@ -1056,29 +1477,31 @@ export default function FormsView({
               </div>
             </div>
 
-            {/* Ticket Tier Binding */}
-            {editingForm.type === "ticket_registration" && (
-              <div className="bg-blue-50/60 border border-blue-100 rounded-2xl p-4 flex flex-col gap-2">
-                <label className="block text-xs font-bold text-blue-900">
-                  Target Ticket Tier Assignment
-                </label>
-                <select
-                  value={editingForm.ticketId}
-                  onChange={(e) => setEditingForm(prev => ({ ...prev, ticketId: e.target.value }))}
-                  className="w-full px-3.5 py-2.5 bg-white border border-blue-200 rounded-xl text-xs font-bold text-slate-800 outline-none cursor-pointer"
-                >
-                  <option value="all">Apply to All Ticket Tiers</option>
-                  {tickets.map(t => (
-                    <option key={t.id || t.tier || t.name} value={t.tier || t.name}>
-                      Only apply to: {t.tier || t.name}
-                    </option>
-                  ))}
-                </select>
-                <span className="text-[11px] text-blue-700 font-medium">
-                  When attendees purchase this tier on the landing page, these questions will be presented during checkout.
-                </span>
-              </div>
-            )}
+            {/* Linked Tickets Info (Manual ticket-to-form linking via Ticket Editor) */}
+            {(() => {
+              const linkedTickets = (tickets || []).filter(t => t.formId === editingForm.id || t.form_id === editingForm.id);
+              return (
+                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800">Linked Tickets</span>
+                    <span className="text-[11px] font-semibold text-slate-500">Configured in Ticket Editor</span>
+                  </div>
+                  {linkedTickets.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {linkedTickets.map(t => (
+                        <span key={t.id || t.tier || t.name} className="px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 font-bold text-xs">
+                          {t.name || t.tier}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-slate-500 italic">
+                      This form is currently not linked to any ticket tier. You can link it to any ticket when creating or editing tickets in the Tickets dashboard.
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
@@ -1180,7 +1603,7 @@ export default function FormsView({
                     </button>
                   </div>
                 ) : (
-                  <form onSubmit={handlePreviewSubmit} className="flex flex-col gap-5">
+                  <form onSubmit={isLastSection ? handlePreviewSubmit : handlePreviewNextSection} className="flex flex-col gap-5">
                     {/* Header */}
                     <div className="border-b border-slate-100 pb-4">
                       <span className="text-[10px] font-extrabold uppercase text-blue-600 tracking-wider">
@@ -1194,24 +1617,58 @@ export default function FormsView({
                       )}
                     </div>
 
-                    {/* Question Rendering */}
-                    {(editingForm.fields || []).map(field => {
-                      if (field.type === "section") {
-                        return (
-                          <div key={field.id} className="pt-4 border-t border-slate-100">
-                            <h3 className="text-sm font-bold text-slate-900">{field.label}</h3>
-                            {field.helpText && (
-                              <p className="text-xs text-slate-400 mt-0.5">{field.helpText}</p>
-                            )}
+                    {/* Multi-Step Section Stepper & Progress Bar */}
+                    {isMultiSection && (
+                      <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 flex flex-col gap-2.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[10px] font-extrabold uppercase tracking-wide">
+                              Section {safeSectionIdx + 1} of {formSections.length}
+                            </span>
+                            <span className="text-xs font-bold text-slate-800 line-clamp-1">
+                              {currentSec.title || `Step ${safeSectionIdx + 1}`}
+                            </span>
                           </div>
-                        );
-                      }
+                          <span className="text-[11px] font-bold text-slate-400">
+                            {Math.round(((safeSectionIdx + 1) / formSections.length) * 100)}% Complete
+                          </span>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full transition-all duration-300"
+                            style={{ width: `${((safeSectionIdx + 1) / formSections.length) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Section Description / Subtitle Banner if provided */}
+                    {currentSec.description && (
+                      <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-3.5 text-xs text-blue-900 font-medium">
+                        {currentSec.description}
+                      </div>
+                    )}
+
+                    {/* Question Rendering for Current Section */}
+                    {(currentSec.fields || []).filter(f => f.type !== "section").map(field => {
+                      const hasError = Boolean(previewSectionErrors[field.id]);
 
                       return (
-                        <div key={field.id} className="flex flex-col gap-1.5">
-                          <label className="text-xs font-bold text-slate-800 flex items-center gap-1">
-                            <span>{field.label}</span>
-                            {field.required && <span className="text-rose-500">*</span>}
+                        <div key={field.id} className={`flex flex-col gap-1.5 p-3 rounded-2xl transition-all ${
+                          hasError ? "bg-rose-50/50 border border-rose-200" : ""
+                        }`}>
+                          <label className="text-xs font-bold text-slate-800 flex items-center justify-between">
+                            <span className="flex items-center gap-1">
+                              <span>{field.label}</span>
+                              {field.required && <span className="text-rose-500">*</span>}
+                            </span>
+                            {hasError && (
+                              <span className="text-[10px] font-bold text-rose-600">
+                                {previewSectionErrors[field.id]}
+                              </span>
+                            )}
                           </label>
 
                           {field.helpText && (
@@ -1224,7 +1681,12 @@ export default function FormsView({
                           {(field.type === "phone" || field.id === "f_core_phone") && (
                             <CountryPhoneInput
                               value={previewAnswers[field.id] || ""}
-                              onChange={(val) => setPreviewAnswers(prev => ({ ...prev, [field.id]: val }))}
+                              onChange={(val) => {
+                                setPreviewAnswers(prev => ({ ...prev, [field.id]: val }));
+                                if (previewSectionErrors[field.id]) {
+                                  setPreviewSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                }
+                              }}
                               placeholder={field.placeholder || ""}
                               required={field.required}
                             />
@@ -1234,7 +1696,12 @@ export default function FormsView({
                           {field.type === "country" && (
                             <CountrySelect
                               value={previewAnswers[field.id] || ""}
-                              onChange={(val) => setPreviewAnswers(prev => ({ ...prev, [field.id]: val }))}
+                              onChange={(val) => {
+                                setPreviewAnswers(prev => ({ ...prev, [field.id]: val }));
+                                if (previewSectionErrors[field.id]) {
+                                  setPreviewSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                }
+                              }}
                               placeholder={field.placeholder || "Select your country..."}
                               required={field.required}
                             />
@@ -1250,7 +1717,12 @@ export default function FormsView({
                                 Object.entries(previewAnswers).find(([k]) => k.toLowerCase().includes("country"))?.[1] || 
                                 ""
                               }
-                              onChange={(val) => setPreviewAnswers(prev => ({ ...prev, [field.id]: val }))}
+                              onChange={(val) => {
+                                setPreviewAnswers(prev => ({ ...prev, [field.id]: val }));
+                                if (previewSectionErrors[field.id]) {
+                                  setPreviewSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                }
+                              }}
                               placeholder={field.placeholder || "Select or enter your city..."}
                               required={field.required}
                             />
@@ -1260,8 +1732,29 @@ export default function FormsView({
                           {field.type === "picture" && (
                             <FormImageUploader
                               value={previewAnswers[field.id] || ""}
-                              onChange={(val) => setPreviewAnswers(prev => ({ ...prev, [field.id]: val }))}
+                              onChange={(val) => {
+                                setPreviewAnswers(prev => ({ ...prev, [field.id]: val }));
+                                if (previewSectionErrors[field.id]) {
+                                  setPreviewSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                }
+                              }}
                               placeholder={field.placeholder || "Upload your photo from phone or computer"}
+                              required={field.required}
+                            />
+                          )}
+
+                          {/* File & Document Uploaders (PDF, Word, Excel, CSV, PPTX, File) */}
+                          {["pdf", "word", "excel", "csv", "pptx", "file"].includes(field.type) && (
+                            <FormFileUploader
+                              fileType={field.type}
+                              value={previewAnswers[field.id] || ""}
+                              onChange={(val) => {
+                                setPreviewAnswers(prev => ({ ...prev, [field.id]: val }));
+                                if (previewSectionErrors[field.id]) {
+                                  setPreviewSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                }
+                              }}
+                              placeholder={field.placeholder || ""}
                               required={field.required}
                             />
                           )}
@@ -1271,7 +1764,12 @@ export default function FormsView({
                             <input
                               type={field.type}
                               value={previewAnswers[field.id] || ""}
-                              onChange={(e) => setPreviewAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
+                              onChange={(e) => {
+                                setPreviewAnswers(prev => ({ ...prev, [field.id]: e.target.value }));
+                                if (previewSectionErrors[field.id]) {
+                                  setPreviewSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                }
+                              }}
                               placeholder={field.placeholder || ""}
                               required={field.required}
                               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-semibold text-slate-900 outline-none transition-all"
@@ -1283,7 +1781,12 @@ export default function FormsView({
                             <textarea
                               rows={3}
                               value={previewAnswers[field.id] || ""}
-                              onChange={(e) => setPreviewAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
+                              onChange={(e) => {
+                                setPreviewAnswers(prev => ({ ...prev, [field.id]: e.target.value }));
+                                if (previewSectionErrors[field.id]) {
+                                  setPreviewSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                }
+                              }}
                               placeholder={field.placeholder || ""}
                               required={field.required}
                               className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-medium text-slate-900 outline-none transition-all resize-none"
@@ -1294,7 +1797,12 @@ export default function FormsView({
                           {field.type === "select" && (
                             <select
                               value={previewAnswers[field.id] || ""}
-                              onChange={(e) => setPreviewAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
+                              onChange={(e) => {
+                                setPreviewAnswers(prev => ({ ...prev, [field.id]: e.target.value }));
+                                if (previewSectionErrors[field.id]) {
+                                  setPreviewSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                }
+                              }}
                               required={field.required}
                               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-blue-600 rounded-xl text-xs font-semibold text-slate-800 outline-none"
                             >
@@ -1315,7 +1823,12 @@ export default function FormsView({
                                     name={`preview_${field.id}`}
                                     value={opt}
                                     checked={previewAnswers[field.id] === opt}
-                                    onChange={() => setPreviewAnswers(prev => ({ ...prev, [field.id]: opt }))}
+                                    onChange={() => {
+                                      setPreviewAnswers(prev => ({ ...prev, [field.id]: opt }));
+                                      if (previewSectionErrors[field.id]) {
+                                        setPreviewSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                      }
+                                    }}
                                     required={field.required && !previewAnswers[field.id]}
                                     className="text-blue-600 focus:ring-blue-500 h-4 w-4"
                                   />
@@ -1341,6 +1854,9 @@ export default function FormsView({
                                           ? [...currentVals, opt]
                                           : currentVals.filter(v => v !== opt);
                                         setPreviewAnswers(prev => ({ ...prev, [field.id]: next }));
+                                        if (previewSectionErrors[field.id]) {
+                                          setPreviewSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                        }
                                       }}
                                       className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
                                     />
@@ -1361,7 +1877,12 @@ export default function FormsView({
                                   <button
                                     type="button"
                                     key={star}
-                                    onClick={() => setPreviewAnswers(prev => ({ ...prev, [field.id]: star }))}
+                                    onClick={() => {
+                                      setPreviewAnswers(prev => ({ ...prev, [field.id]: star }));
+                                      if (previewSectionErrors[field.id]) {
+                                        setPreviewSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                      }
+                                    }}
                                     className="p-1.5 transition-transform hover:scale-125 cursor-pointer"
                                   >
                                     <Star
@@ -1389,7 +1910,12 @@ export default function FormsView({
                                     <button
                                       type="button"
                                       key={score}
-                                      onClick={() => setPreviewAnswers(prev => ({ ...prev, [field.id]: score }))}
+                                      onClick={() => {
+                                        setPreviewAnswers(prev => ({ ...prev, [field.id]: score }));
+                                        if (previewSectionErrors[field.id]) {
+                                          setPreviewSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                        }
+                                      }}
                                       className={`w-8 h-8 rounded-xl font-bold text-xs transition-all cursor-pointer ${
                                         isSelected
                                           ? "bg-blue-600 text-white shadow-md shadow-blue-600/30 scale-110"
@@ -1414,7 +1940,12 @@ export default function FormsView({
                               <input
                                 type="checkbox"
                                 checked={previewAnswers[field.id] ?? field.defaultValue ?? false}
-                                onChange={(e) => setPreviewAnswers(prev => ({ ...prev, [field.id]: e.target.checked }))}
+                                onChange={(e) => {
+                                  setPreviewAnswers(prev => ({ ...prev, [field.id]: e.target.checked }));
+                                  if (previewSectionErrors[field.id]) {
+                                    setPreviewSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                  }
+                                }}
                                 className="sr-only peer"
                               />
                               <div className="w-10 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 relative"></div>
@@ -1427,12 +1958,53 @@ export default function FormsView({
                       );
                     })}
 
-                    <button
-                      type="submit"
-                      className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-md shadow-blue-600/20 transition-all mt-4 cursor-pointer"
-                    >
-                      {editingForm.settings?.submitButtonText || "Submit Response"}
-                    </button>
+                    {/* Section Validation Error Banner */}
+                    {Object.keys(previewSectionErrors).length > 0 && (
+                      <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs font-bold text-rose-700 flex items-center gap-2">
+                        <AlertCircle size={15} className="shrink-0 text-rose-600" />
+                        <span>Please answer all required questions in this section before continuing.</span>
+                      </div>
+                    )}
+
+                    {/* Navigation Footer: Back, Next/Submit, Clear form */}
+                    <div className="flex items-center justify-between pt-4 border-t border-slate-100 mt-2">
+                      <div className="flex items-center gap-2.5">
+                        {!isFirstSection && (
+                          <button
+                            type="button"
+                            onClick={handlePreviewPrevSection}
+                            className="px-5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs shadow-2xs transition-all cursor-pointer"
+                          >
+                            Back
+                          </button>
+                        )}
+
+                        {!isLastSection ? (
+                          <button
+                            type="button"
+                            onClick={handlePreviewNextSection}
+                            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer flex items-center gap-1.5"
+                          >
+                            <span>Next</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="submit"
+                            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer flex items-center gap-1.5"
+                          >
+                            <span>{editingForm.settings?.submitButtonText || "Submit Response"}</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handlePreviewClearForm}
+                        className="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                      >
+                        Clear form
+                      </button>
+                    </div>
                   </form>
                 )}
               </div>
@@ -1628,6 +2200,42 @@ export default function FormsView({
                           <span className="flex items-center gap-1 text-amber-500 font-bold">
                             {val} / 5 Stars ⭐
                           </span>
+                        ) : f.type === "picture" ? (
+                          <div className="mt-1">
+                            {typeof val === "string" && val.startsWith("data:image") ? (
+                              <img src={val} alt="Attendee Photo" className="w-16 h-16 object-cover rounded-2xl border border-slate-200 shadow-2xs" />
+                            ) : (
+                              <span>{String(val?.name || val)}</span>
+                            )}
+                          </div>
+                        ) : ["pdf", "word", "excel", "csv", "pptx", "file"].includes(f.type) || (typeof val === "object" && val?.name) ? (
+                          <div className="mt-1 flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-xl shadow-2xs">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <FileText size={16} className="text-blue-600 shrink-0" />
+                              <div className="flex flex-col min-w-0">
+                                <span className="text-xs font-bold text-slate-900 truncate max-w-[200px]">
+                                  {val.name || String(val)}
+                                </span>
+                                {val.size && (
+                                  <span className="text-[10px] text-slate-400 font-medium">
+                                    {formatFileSize(val.size)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {val.url && (
+                              <a
+                                href={val.url}
+                                download={val.name || "document"}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="p-1.5 text-blue-600 hover:bg-blue-100/60 rounded-lg transition-colors cursor-pointer"
+                                title="Download Document"
+                              >
+                                <Download size={14} />
+                              </a>
+                            )}
+                          </div>
                         ) : Array.isArray(val) ? (
                           val.join(", ")
                         ) : (
@@ -1667,13 +2275,6 @@ export default function FormsView({
         </div>
 
         <div className="flex items-center gap-2.5">
-          <button
-            onClick={() => setTemplateModalOpen(true)}
-            className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold py-2.5 px-4 rounded-xl text-xs shadow-xs transition-colors cursor-pointer"
-          >
-            Templates Library
-          </button>
-
           <button
             onClick={handleOpenCreateBlank}
             className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer"
@@ -1805,15 +2406,15 @@ export default function FormsView({
             <p className="text-xs text-slate-400 mt-1 max-w-sm">
               {selectedStatus === "Archived" 
                 ? "Archived forms will appear here safely preserved." 
-                : "Create a custom form or explore our templates library to start collecting responses."}
+                : "Create a custom form to start collecting responses."}
             </p>
           </div>
           {selectedStatus !== "Archived" && (
             <button
-              onClick={() => setTemplateModalOpen(true)}
-              className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-bold text-xs shadow-md shadow-blue-600/20 cursor-pointer"
+              onClick={handleOpenCreateBlank}
+              className="mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-md shadow-blue-600/20 cursor-pointer transition-all"
             >
-              Explore Pre-built Templates
+              Create Form
             </button>
           )}
         </div>
@@ -1865,40 +2466,45 @@ export default function FormsView({
                   </div>
                 </div>
 
-                {/* Card Actions */}
-                <div className="flex items-center justify-between gap-1.5 border-t border-slate-100 pt-4">
+                {/* Card Actions (Grouped & Right Aligned) */}
+                <div className="flex items-center justify-end gap-1.5 border-t border-slate-100 pt-3.5">
                   <button
                     onClick={() => handleEditForm(form)}
-                    className="flex-1 py-1.5 px-2.5 bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white rounded-xl text-xs font-bold transition-all text-center cursor-pointer"
+                    className="p-2 bg-blue-50 hover:bg-blue-100/80 text-blue-600 rounded-xl transition-all cursor-pointer flex items-center justify-center"
+                    title="Edit Form"
+                    aria-label="Edit Form"
                   >
-                    Edit
+                    <Pencil size={15} />
                   </button>
 
                   <button
                     onClick={() => handleViewResponses(form)}
-                    className="px-2.5 py-1.5 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 font-bold text-xs transition-colors cursor-pointer"
-                    title="View Responses & Analytics"
+                    className="p-2 rounded-xl text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer flex items-center justify-center"
+                    title="Analytics & Responses"
+                    aria-label="Analytics & Responses"
                   >
-                    Analytics
+                    <BarChart2 size={15} />
                   </button>
 
                   {!isArchived && (
                     <button
                       onClick={() => handleOpenShare(form)}
-                      className="px-2.5 py-1.5 rounded-xl text-slate-500 hover:text-blue-600 hover:bg-blue-50 font-bold text-xs transition-colors cursor-pointer"
+                      className="p-2 rounded-xl text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer flex items-center justify-center"
                       title="Share / QR Code"
+                      aria-label="Share Form"
                     >
-                      Share
+                      <Share2 size={15} />
                     </button>
                   )}
 
                   {!isArchived && (
                     <button
                       onClick={() => handleDuplicateForm(form)}
-                      className="px-2.5 py-1.5 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 font-bold text-xs transition-colors cursor-pointer"
+                      className="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer flex items-center justify-center"
                       title="Duplicate Form"
+                      aria-label="Duplicate Form"
                     >
-                      Duplicate
+                      <Copy size={15} />
                     </button>
                   )}
 
@@ -1908,11 +2514,11 @@ export default function FormsView({
                         if (onSaveForm) onSaveForm({ ...form, status: "active", isArchived: false });
                         else if (onRestoreForm) onRestoreForm(form.id);
                       }}
-                      className="px-2.5 py-1.5 rounded-xl text-emerald-600 hover:bg-emerald-50 font-bold text-xs transition-colors cursor-pointer flex items-center gap-1"
+                      className="p-2 rounded-xl text-emerald-600 hover:bg-emerald-50 transition-colors cursor-pointer flex items-center justify-center"
                       title="Restore Form"
+                      aria-label="Restore Form"
                     >
-                      <RotateCcw size={12} />
-                      <span>Restore</span>
+                      <RotateCcw size={15} />
                     </button>
                   ) : (
                     <button
@@ -1922,74 +2528,17 @@ export default function FormsView({
                           else if (onDeleteForm) onDeleteForm(form.id);
                         }
                       }}
-                      className="px-2.5 py-1.5 rounded-xl text-slate-500 hover:text-amber-600 hover:bg-amber-50 font-bold text-xs transition-colors cursor-pointer flex items-center gap-1"
+                      className="p-2 rounded-xl text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors cursor-pointer flex items-center justify-center"
                       title="Archive Form"
+                      aria-label="Archive Form"
                     >
-                      <Archive size={12} />
-                      <span>Archive</span>
+                      <Archive size={15} />
                     </button>
                   )}
                 </div>
               </div>
             );
           })}
-        </div>
-      )}
-
-      {/* ===================================================================== */}
-      {/* TEMPLATE PICKER MODAL                                                 */}
-      {/* ===================================================================== */}
-      {templateModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white border border-slate-200 rounded-3xl p-7 max-w-2xl w-full shadow-2xl flex flex-col gap-6 animate-scale-up max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">
-                  Choose a Form Template
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Select a pre-designed template tailored for events, tickets, and feedback collection.
-                </p>
-              </div>
-              <button
-                onClick={() => setTemplateModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 font-bold cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3.5">
-              {PRESET_TEMPLATES.map(tpl => (
-                <div
-                  key={tpl.id}
-                  onClick={() => handleOpenTemplate(tpl)}
-                  className="p-4 rounded-2xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50/30 transition-all cursor-pointer flex items-center justify-between group"
-                >
-                  <div className="flex flex-col gap-1 pr-4">
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-xs font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-                        {tpl.title}
-                      </h4>
-                      <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                        {tpl.category}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500 font-medium">
-                      {tpl.description}
-                    </p>
-                    <span className="text-[11px] text-blue-600 font-semibold mt-1">
-                      Includes {tpl.fields.length} pre-configured questions
-                    </span>
-                  </div>
-
-                  <button className="px-3.5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold shadow-xs group-hover:scale-105 transition-transform shrink-0 cursor-pointer">
-                    Use Template
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       )}
 

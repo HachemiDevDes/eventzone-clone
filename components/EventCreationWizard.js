@@ -43,18 +43,37 @@ const PRESET_BANNERS = [
 ];
 
 const INDUSTRIES = [
-  "Energy & Hydrocarbons",
-  "Technology & Software",
-  "Finance & Banking",
-  "Healthcare & Pharmaceuticals",
-  "Education & Academia",
-  "Manufacturing & Industry",
-  "Transportation & Logistics",
-  "Real Estate & Construction",
-  "Retail & E-commerce",
-  "Government & Public Sector",
-  "Sustainability & Climate",
-  "Telecommunications"
+  "Technology, AI & Software",
+  "Energy, Oil & Gas",
+  "Renewable Energy & CleanTech",
+  "Finance, Banking & FinTech",
+  "Healthcare, Pharmaceuticals & Biotech",
+  "Education, EdTech & Academia",
+  "Manufacturing & Heavy Industry",
+  "Transportation, Aviation & Logistics",
+  "Real Estate, Architecture & Construction",
+  "Retail, Consumer Goods & E-Commerce",
+  "Media, Entertainment & Gaming",
+  "Agriculture, AgriTech & Food Production",
+  "Government, Defense & Public Sector",
+  "Non-Profit, NGOs & Social Impact",
+  "Hospitality, Travel & Tourism",
+  "Aerospace, Defense & SpaceTech",
+  "Automotive, EV & Future Mobility",
+  "Telecommunications & Networking",
+  "Chemicals, Materials & Mining",
+  "Environmental, Climate & Sustainability",
+  "Legal, Consulting & Professional Services",
+  "Cybersecurity & Cloud Infrastructure",
+  "Biotechnology & Life Sciences",
+  "Fashion, Luxury & Apparel",
+  "Sports, Fitness & Recreation",
+  "Blockchain, Web3 & Digital Assets",
+  "Venture Capital & Private Equity",
+  "Robotics & Industrial Automation",
+  "Supply Chain & Maritime Shipping",
+  "Arts, Culture & Heritage",
+  "Other / General Business"
 ];
 
 const TIMEZONES = [
@@ -558,11 +577,6 @@ export default function EventCreationWizard({ onCancel, onEventCreated, userId, 
                   id: "Multiple dates, times or sessions",
                   title: "Multiple dates, times or sessions",
                   desc: "Multi-day summit, tracks, breakout workshops, and speaker panels"
-                },
-                {
-                  id: "Appointment scheduling",
-                  title: "Appointment scheduling",
-                  desc: "1-on-1 meetings, demo bookings, and scheduled visitor slots"
                 }
               ].map((item) => (
                 <button
@@ -1030,25 +1044,25 @@ export default function EventCreationWizard({ onCancel, onEventCreated, userId, 
                     : "border-slate-300"
                 }`}>
                   <div className="flex items-center flex-1 overflow-hidden pr-2">
+                    <span className="text-slate-500 font-semibold text-xs sm:text-sm select-none shrink-0 pr-1">
+                      eventzone.pro/
+                    </span>
                     <input
                       type="text"
                       autoFocus
                       required
-                      placeholder="myevent"
+                      placeholder="my-event"
                       value={formData.slug}
                       onChange={(e) => handleChange("slug", e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
                       className="w-full text-slate-900 font-bold text-base sm:text-lg outline-none bg-transparent placeholder-slate-400"
                     />
-                    <span className="text-slate-500 font-semibold text-xs sm:text-sm select-none shrink-0 pl-1">
-                      .eventzone.io
-                    </span>
                   </div>
                   <div className="w-7 h-7 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-600 flex items-center justify-center shrink-0">
                     <Check size={16} className="stroke-[2.5]" />
                   </div>
                 </div>
                 <p className="text-[11px] text-slate-400 font-medium mt-2">
-                  Direct Guest Link: <span className="text-blue-600 font-bold">https://{formData.slug || "myevent"}.eventzone.io</span>
+                  Direct Guest Link: <span className="text-blue-600 font-bold">https://eventzone.pro/{formData.slug || "my-event"}</span>
                 </p>
               </div>
 
@@ -1164,7 +1178,7 @@ export default function EventCreationWizard({ onCancel, onEventCreated, userId, 
                     </div>
                     <div className="flex items-center gap-1.5 text-blue-600 font-semibold truncate pt-1">
                       <LinkIcon size={12} className="shrink-0" />
-                      <span className="truncate">{formData.slug}.eventzone.io</span>
+                      <span className="truncate">eventzone.pro/{formData.slug}</span>
                     </div>
                   </div>
                 </div>

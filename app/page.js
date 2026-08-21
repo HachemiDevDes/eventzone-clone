@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { 
   CheckCircle2, Ticket, ShieldAlert, ShieldCheck,
@@ -49,38 +50,59 @@ import {
   uploadFileToBucket,
   fetchUserEvents, fetchPublicEvents, createEvent, deleteEvent, archiveEvent, unarchiveEvent,
   fetchVisitorRegistrations, registerVisitorForEvent, upsertUserProfile,
+  isMatchingEmail, isMatchingPhoneNumber, cleanPhoneNumber,
   setActiveEventId, getActiveEventId, DEFAULT_EVENT_ID, SHOWCASE_EVENTS,
   subscribeToRealtimeSync, broadcastRealtimeChange
 } from "../lib/db";
 import { supabase } from "../lib/supabase";
 
+function safeLocalStorageSet(key, value) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(key, typeof value === "string" ? value : JSON.stringify(value));
+  } catch (err) {
+    console.warn(`Could not save key ${key} to localStorage:`, err);
+  }
+}
 
 const INDUSTRIES = [
-  "Energy & Hydrocarbons",
-  "Technology & Software",
-  "Finance & Banking",
-  "Healthcare & Pharmaceuticals",
-  "Education & Academia",
+  "Technology, AI & Software",
+  "Energy, Oil & Gas",
+  "Renewable Energy & CleanTech",
+  "Finance, Banking & FinTech",
+  "Healthcare, Pharmaceuticals & Biotech",
+  "Education, EdTech & Academia",
   "Manufacturing & Heavy Industry",
-  "Transportation & Logistics",
-  "Real Estate & Construction",
-  "Retail & E-commerce",
-  "Media & Entertainment",
-  "Agriculture & Food Production",
-  "Government & Public Sector",
-  "Non-Profit & NGOs",
-  "Hospitality & Tourism",
-  "Aerospace & Defense",
-  "Automotive & Mobility",
-  "Telecommunications",
-  "Chemicals & Materials",
-  "Environmental & Sustainability Services",
-  "Consulting & Professional Services"
+  "Transportation, Aviation & Logistics",
+  "Real Estate, Architecture & Construction",
+  "Retail, Consumer Goods & E-Commerce",
+  "Media, Entertainment & Gaming",
+  "Agriculture, AgriTech & Food Production",
+  "Government, Defense & Public Sector",
+  "Non-Profit, NGOs & Social Impact",
+  "Hospitality, Travel & Tourism",
+  "Aerospace, Defense & SpaceTech",
+  "Automotive, EV & Future Mobility",
+  "Telecommunications & Networking",
+  "Chemicals, Materials & Mining",
+  "Environmental, Climate & Sustainability",
+  "Legal, Consulting & Professional Services",
+  "Cybersecurity & Cloud Infrastructure",
+  "Biotechnology & Life Sciences",
+  "Fashion, Luxury & Apparel",
+  "Sports, Fitness & Recreation",
+  "Blockchain, Web3 & Digital Assets",
+  "Venture Capital & Private Equity",
+  "Robotics & Industrial Automation",
+  "Supply Chain & Maritime Shipping",
+  "Arts, Culture & Heritage",
+  "Other / General Business"
 ];
 
 export function HomeContent() {
+  const searchParamsHook = useSearchParams();
   const { t, lang, setLang, isRTL, dir, languages } = useLanguage();
-  const [mounted, setMounted] = useState(() => typeof window !== "undefined");
+  const [mounted, setMounted] = useState(false);
 
   // Authentication & Role State
   const [currentUser, setCurrentUser] = useState(null);
@@ -141,7 +163,16 @@ export function HomeContent() {
   const [saveStatus, setSaveStatus] = useState("saved");
 
   // Single-event data
-  const [eventDetails, setEventDetails] = useState(null);
+  const [eventDetails, setEventDetails] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const urlId = new URLSearchParams(window.location.search).get("eventId") || DEFAULT_EVENT_ID;
+        const cached = localStorage.getItem(`eventzone_cached_event_${urlId}`);
+        if (cached) return JSON.parse(cached);
+      } catch (e) {}
+    }
+    return null;
+  });
 
   const [sessions, setSessions] = useState([]);
   const [attendees, setAttendees] = useState([]);
@@ -251,9 +282,7 @@ export function HomeContent() {
           };
 
           setCurrentUser(syncedUser);
-          if (typeof window !== "undefined") {
-            localStorage.setItem("eventzone_user", JSON.stringify(syncedUser));
-          }
+          safeLocalStorageSet("eventzone_user", syncedUser);
 
           // Cross-device / App <-> Web Real-time Database Subscription
           if (!profileChannel) {
@@ -289,9 +318,7 @@ export function HomeContent() {
                     };
 
                     setCurrentUser(updatedUser);
-                    if (typeof window !== "undefined") {
-                      localStorage.setItem("eventzone_user", JSON.stringify(updatedUser));
-                    }
+                    safeLocalStorageSet("eventzone_user", updatedUser);
                   }
                 }
               )
@@ -381,18 +408,73 @@ export function HomeContent() {
           rsvpsResult, rsvpSettingsResult
         ] = results;
 
-        if (eventResult.status === "fulfilled") setEventDetails(eventResult.value);
+        const loadedTickets = ticketsResult.status === "fulfilled" ? (ticketsResult.value || []) : [];
+        if (ticketsResult.status === "fulfilled") setTickets(loadedTickets);
+
+        if (eventResult.status === "fulfilled") {
+          setEventDetails(eventResult.value);
+          if (eventResult.value && typeof window !== "undefined") {
+            try {
+              localStorage.setItem(`eventzone_cached_event_${activeEventId}`, JSON.stringify(eventResult.value));
+            } catch (e) {}
+          }
+        }
         if (sessionsResult.status === "fulfilled") setSessions(sessionsResult.value);
-        if (attendeesResult.status === "fulfilled") setAttendees(attendeesResult.value);
-        if (pendingResult.status === "fulfilled") setPending(pendingResult.value);
+        const loadedSubmissions = formSubsResult.status === "fulfilled" ? (formSubsResult.value || []) : [];
+        if (formSubsResult.status === "fulfilled") setFormSubmissions(loadedSubmissions);
+
+        if (attendeesResult.status === "fulfilled") {
+          let atts = attendeesResult.value || [];
+          if (loadedTickets.length === 1) {
+            const singleName = loadedTickets[0].name || loadedTickets[0].tier;
+            atts = atts.map(a => ({
+              ...a,
+              ticketType: singleName,
+              ticket_type: singleName
+            }));
+          }
+          if (loadedSubmissions.length > 0) {
+            atts = atts.map(a => {
+              const sub = loadedSubmissions.find(s => 
+                s.id === a.id || 
+                (s.respondentEmail && a.email && s.respondentEmail.toLowerCase() === a.email.toLowerCase())
+              );
+              if (sub && sub.answers && typeof sub.answers === 'object') {
+                const mergedAnswers = { ...sub.answers, ...(a.answers || {}) };
+                return {
+                  ...a,
+                  answers: mergedAnswers,
+                  customAnswers: mergedAnswers,
+                  formAnswers: mergedAnswers,
+                  company: a.company || sub.answers.company || sub.answers.f_company || '',
+                  jobTitle: a.jobTitle || sub.answers.jobTitle || sub.answers.job_title || sub.answers.f_job_title || '',
+                  phone: a.phone || sub.answers.phone || sub.answers.f_core_phone || sub.answers.phoneNumber || ''
+                };
+              }
+              return a;
+            });
+          }
+          setAttendees(atts);
+        }
+        if (pendingResult.status === "fulfilled") {
+          let pends = pendingResult.value || [];
+          if (loadedTickets.length === 1) {
+            const singleName = loadedTickets[0].name || loadedTickets[0].tier;
+            pends = pends.map(p => ({
+              ...p,
+              ticketType: singleName,
+              ticket_type: singleName
+            }));
+          }
+          setPending(pends);
+        }
         if (orgsResult.status === "fulfilled") setOrganizations(orgsResult.value);
         if (sponsorsResult.status === "fulfilled") setSponsors(sponsorsResult.value);
         if (exhibitorsResult.status === "fulfilled") setExhibitors(exhibitorsResult.value);
-        if (ticketsResult.status === "fulfilled") setTickets(ticketsResult.value);
+        if (ticketsResult.status === "fulfilled") setTickets(loadedTickets);
         if (teamResult.status === "fulfilled") setTeam(teamResult.value);
         if (floorPlansResult.status === "fulfilled") setFloorPlans(floorPlansResult.value);
         if (formsResult.status === "fulfilled") setForms(formsResult.value);
-        if (formSubsResult.status === "fulfilled") setFormSubmissions(formSubsResult.value);
         if (rsvpsResult.status === "fulfilled") setRsvps(rsvpsResult.value);
         if (rsvpSettingsResult.status === "fulfilled") setRsvpSettings(rsvpSettingsResult.value);
 
@@ -440,6 +522,18 @@ export function HomeContent() {
         setRsvps(prev => prev.filter(r => r.id !== payload.id));
       } else if (type === "RSVP_SETTINGS_SAVED" && payload) {
         setRsvpSettings(payload);
+      } else if (type === "PENDING_SUBMITTED" && payload) {
+        setPending(prev => {
+          const exists = prev.some(p => p.id === payload.id);
+          return exists ? prev.map(p => p.id === payload.id ? payload : p) : [payload, ...prev];
+        });
+      } else if (type === "PENDING_SAVED" && payload) {
+        setPending(prev => {
+          const exists = prev.some(p => p.id === payload.id);
+          return exists ? prev.map(p => p.id === payload.id ? payload : p) : [payload, ...prev];
+        });
+      } else if (type === "PENDING_DELETED" && payload?.id) {
+        setPending(prev => prev.filter(p => p.id !== payload.id));
       }
     });
 
@@ -466,9 +560,29 @@ export function HomeContent() {
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'participants', filter: `event_id=eq.${activeEventId}` }, async () => {
           const updatedAttendees = await fetchAttendees(activeEventId);
-          if (updatedAttendees) setAttendees(updatedAttendees);
+          if (updatedAttendees) {
+            const seen = new Set();
+            const deduped = updatedAttendees.filter(a => {
+              if (seen.has(a.id)) return false;
+              seen.add(a.id);
+              return true;
+            });
+            setAttendees(deduped);
+          }
         })
-        .on('postgres_changes', { event: '*', schema: 'tickets', table: 'tickets', filter: `event_id=eq.${activeEventId}` }, async () => {
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'pending_registrations', filter: `event_id=eq.${activeEventId}` }, async () => {
+          const updatedPending = await fetchPending(activeEventId);
+          if (updatedPending) {
+            const seen = new Set();
+            const deduped = updatedPending.filter(p => {
+              if (seen.has(p.id)) return false;
+              seen.add(p.id);
+              return true;
+            });
+            setPending(deduped);
+          }
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets', filter: `event_id=eq.${activeEventId}` }, async () => {
           const updatedTickets = await fetchTickets(activeEventId);
           if (updatedTickets) setTickets(updatedTickets);
         })
@@ -595,9 +709,7 @@ export function HomeContent() {
   const handleToggleRole = (targetRole) => {
     const updated = { ...currentUser, role: targetRole };
     setCurrentUser(updated);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("eventzone_user", JSON.stringify(updated));
-    }
+    safeLocalStorageSet("eventzone_user", updated);
     if (targetRole === "visitor") {
       setCurrentView("home");
     } else {
@@ -634,9 +746,7 @@ export function HomeContent() {
       };
 
       setCurrentUser(syncedUser);
-      if (typeof window !== "undefined") {
-        localStorage.setItem("eventzone_user", JSON.stringify(syncedUser));
-      }
+      safeLocalStorageSet("eventzone_user", syncedUser);
       return { success: true };
     } catch (err) {
       console.error("Profile update error:", err);
@@ -679,8 +789,123 @@ export function HomeContent() {
 
   // Visitor RSVP Handler
   const handleVisitorRegister = async (eventId, visitorData) => {
+    const emailToTest = (
+      visitorData.email || 
+      visitorData.customAnswers?.f_core_email || 
+      visitorData.answers?.f_core_email || 
+      ""
+    ).trim().toLowerCase();
+
+    const phoneToTest = (
+      visitorData.phone || 
+      visitorData.customAnswers?.f_core_phone || 
+      visitorData.answers?.f_core_phone || 
+      visitorData.customAnswers?.phone || 
+      visitorData.answers?.phone || 
+      visitorData.customAnswers?.phoneNumber || 
+      visitorData.answers?.phoneNumber || 
+      ""
+    ).trim();
+
+    // Fast in-memory duplicate check against existing attendees and pending requests
+    if (emailToTest) {
+      const dupAttendee = attendees.find(a => a.email && isMatchingEmail(a.email, emailToTest) && a.status !== 'archived' && !a.isArchived);
+      if (dupAttendee) {
+        return {
+          success: false,
+          error: "An attendee with this email address is already registered for this event.",
+          code: "DUPLICATE_REGISTRATION"
+        };
+      }
+      const dupPending = pending.find(p => p.email && isMatchingEmail(p.email, emailToTest));
+      if (dupPending) {
+        return {
+          success: false,
+          error: "A registration application with this email address is already pending organizer review.",
+          code: "DUPLICATE_REGISTRATION"
+        };
+      }
+    }
+
+    if (phoneToTest) {
+      const dupAttendeeByPhone = attendees.find(a => {
+        if (a.status === 'archived' || a.isArchived) return false;
+        const aPhone = a.phone || a.answers?.phone || a.answers?.f_core_phone || a.answers?.phoneNumber;
+        return aPhone && isMatchingPhoneNumber(aPhone, phoneToTest);
+      });
+      if (dupAttendeeByPhone) {
+        return {
+          success: false,
+          error: "An attendee with this phone number is already registered for this event.",
+          code: "DUPLICATE_REGISTRATION"
+        };
+      }
+      const dupPendingByPhone = pending.find(p => {
+        const pPhone = p.phone || p.answers?.phone || p.answers?.f_core_phone || p.answers?.phoneNumber;
+        return pPhone && isMatchingPhoneNumber(pPhone, phoneToTest);
+      });
+      if (dupPendingByPhone) {
+        return {
+          success: false,
+          error: "A registration application with this phone number is already pending organizer review.",
+          code: "DUPLICATE_REGISTRATION"
+        };
+      }
+    }
+
     const newPass = await registerVisitorForEvent(eventId, visitorData);
+    if (!newPass || newPass.error || newPass.success === false) {
+      return newPass;
+    }
+
     setVisitorRegistrations(prev => [newPass, ...prev]);
+
+    const isPending = Boolean(visitorData.requiresApproval || visitorData.requires_approval);
+
+    if (isPending) {
+      setPending(prev => {
+        const item = {
+          id: newPass.id,
+          name: visitorData.name || "Guest Attendee",
+          email: visitorData.email || "visitor@eventzone.io",
+          company: visitorData.company || "",
+          jobTitle: visitorData.jobTitle || "",
+          phone: visitorData.phone || "",
+          ticketType: visitorData.ticketType || visitorData.ticket_type || "Standard Admission",
+          ticket_type: visitorData.ticketType || visitorData.ticket_type || "Standard Admission",
+          note: `Applied for ${visitorData.ticketType || visitorData.ticket_type || "Standard Admission"} (Pending Approval)`,
+          date: new Date().toISOString().split('T')[0],
+          answers: visitorData.customAnswers || visitorData.answers || {},
+          formAnswers: visitorData.customAnswers || visitorData.answers || {}
+        };
+        return [item, ...prev.filter(p => p.id !== newPass.id)];
+      });
+    } else {
+      const nameParts = (visitorData.name || 'Guest Attendee').trim().split(' ');
+      setAttendees(prev => {
+        const item = {
+          id: newPass.id,
+          name: visitorData.name || 'Guest Attendee',
+          first_name: nameParts[0] || 'Guest',
+          last_name: nameParts.slice(1).join(' ') || 'Attendee',
+          email: visitorData.email || "visitor@eventzone.io",
+          company: visitorData.company || "",
+          jobTitle: visitorData.jobTitle || "",
+          job_title: visitorData.jobTitle || "",
+          phone: visitorData.phone || "",
+          ticketType: visitorData.ticketType || visitorData.ticket_type || "Standard Admission",
+          ticket_type: visitorData.ticketType || visitorData.ticket_type || "Standard Admission",
+          status: 'registered',
+          status_participation: 'registered',
+          registeredDate: new Date().toISOString().split('T')[0],
+          registered_at: new Date().toISOString(),
+          answers: visitorData.customAnswers || visitorData.answers || {},
+          formAnswers: visitorData.customAnswers || visitorData.answers || {}
+        };
+        return [item, ...prev.filter(a => a.id !== newPass.id)];
+      });
+    }
+
     return newPass;
   };
 
@@ -837,6 +1062,13 @@ export function HomeContent() {
     switch (key) {
       case "eventDetails":
         setEventDetails(val);
+        if (val && typeof window !== "undefined") {
+          try {
+            localStorage.setItem(`eventzone_cached_event_${activeEventId}`, JSON.stringify(val));
+          } catch (e) {}
+        }
+        setPublicEvents(prev => prev.map(e => (activeEventId ? (e.id === activeEventId ? { ...e, ...val } : e) : e)));
+        setUserEvents(prev => prev.map(e => (activeEventId ? (e.id === activeEventId ? { ...e, ...val } : e) : e)));
         updateEventDetails(val, activeEventId).catch(console.error);
         break;
       case "sessions":
@@ -864,6 +1096,29 @@ export function HomeContent() {
         setExhibitors(val);
         break;
       case "tickets":
+        (val || []).forEach(newT => {
+          const oldT = tickets.find(t => t.id === newT.id);
+          const oldName = oldT ? (oldT.name || oldT.tier) : null;
+          const newName = newT.name || newT.tier;
+          if (oldName && newName && oldName !== newName) {
+            setAttendees(prev => prev.map(a => {
+              if ((a.ticketType || a.ticket_type) === oldName || a.ticketId === newT.id) {
+                const updated = { ...a, ticketType: newName, ticket_type: newName };
+                upsertAttendee(updated, activeEventId).catch(console.error);
+                return updated;
+              }
+              return a;
+            }));
+            setPending(prev => prev.map(p => {
+              if ((p.ticketType || p.ticket_type) === oldName || p.ticketId === newT.id) {
+                const updated = { ...p, ticketType: newName, ticket_type: newName };
+                upsertPending(updated, activeEventId).catch(console.error);
+                return updated;
+              }
+              return p;
+            }));
+          }
+        });
         syncArrayToDb(tickets, val, upsertTicket, deleteTicket);
         setTickets(val);
         break;
@@ -937,6 +1192,14 @@ export function HomeContent() {
       try {
         switch (activeModalType) {
           case "attendee": {
+            const cleanEmail = (modalEmail || "").trim().toLowerCase();
+            if (cleanEmail) {
+              const dup = attendees.find(a => a.email && isMatchingEmail(a.email, cleanEmail) && a.status !== 'archived' && !a.isArchived);
+              if (dup) {
+                alert("An attendee with this email address is already registered for this event.");
+                return;
+              }
+            }
             const saved = await upsertAttendee({
               name: modalName, email: modalEmail, ticketType: modalTicket, image: modalLogo,
               status: "registered", registeredDate: new Date().toISOString().split("T")[0],
@@ -999,7 +1262,41 @@ export function HomeContent() {
 
   const handleSaveTicket = async (ticketData) => {
     try {
+      const oldTicket = tickets.find(t => t.id === ticketData.id);
+      const oldName = oldTicket ? (oldTicket.name || oldTicket.tier) : null;
+      const newName = ticketData.name || ticketData.tier;
+
       const saved = await upsertTicket(ticketData, activeEventId);
+
+      // If the ticket tier was renamed, cascade the rename across all attendees and pending registrations
+      if (newName) {
+        setAttendees(prev => prev.map(a => {
+          const aType = a.ticketType || a.ticket_type;
+          const shouldUpdate = (oldName && aType === oldName) || 
+                               (a.ticketId && a.ticketId === ticketData.id) ||
+                               (tickets.length <= 1);
+          if (shouldUpdate) {
+            const updated = { ...a, ticketType: newName, ticket_type: newName, ticketId: saved.id };
+            upsertAttendee(updated, activeEventId).catch(console.error);
+            return updated;
+          }
+          return a;
+        }));
+
+        setPending(prev => prev.map(p => {
+          const pType = p.ticketType || p.ticket_type;
+          const shouldUpdate = (oldName && pType === oldName) || 
+                               (p.ticketId && p.ticketId === ticketData.id) ||
+                               (tickets.length <= 1);
+          if (shouldUpdate) {
+            const updated = { ...p, ticketType: newName, ticket_type: newName, ticketId: saved.id };
+            upsertPending(updated, activeEventId).catch(console.error);
+            return updated;
+          }
+          return p;
+        }));
+      }
+
       if (ticketData.isPopular) {
         // Enforce only one ticket has isPopular tag
         const otherTickets = tickets.map(t => {
@@ -1097,6 +1394,22 @@ export function HomeContent() {
 
 
 
+
+  // Prevent hydration mismatch between server-rendered HTML and client URL-selected view
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center font-sans">
+        <div className="flex flex-col items-center gap-3">
+          <img 
+            src="https://i.imgur.com/jFDrQbM.png" 
+            alt="eventzone" 
+            style={{ width: "130px", height: "32px", objectFit: "contain" }}
+            className="h-8 w-auto object-contain opacity-80 animate-pulse" 
+          />
+        </div>
+      </div>
+    );
+  }
 
   // ==========================================================================
   // 0.5. DEDICATED FULL-PAGE AUTHENTICATION VIEW (SIGN IN / SIGN UP)
@@ -1242,7 +1555,10 @@ export function HomeContent() {
   // 1.5. EVENT PUBLIC LANDING PAGE & REGISTRATION (VISITOR & ATTENDEE VIEW)
   // ==========================================================================
   if (currentView === "event-landing" || currentView === "register") {
-    const landingEventDetails = publicEvents.find(e => e.id === activeEventId) || userEvents.find(e => e.id === activeEventId) || eventDetails;
+    const rawLanding = publicEvents.find(e => e.id === activeEventId) || userEvents.find(e => e.id === activeEventId) || {};
+    const landingEventDetails = (eventDetails && (!activeEventId || eventDetails.id === activeEventId))
+      ? { ...rawLanding, ...eventDetails }
+      : (publicEvents.find(e => e.id === activeEventId) || userEvents.find(e => e.id === activeEventId) || eventDetails);
     return (
       <EventPublicLandingPage
         eventId={activeEventId}
@@ -1532,7 +1848,7 @@ export function HomeContent() {
                   <Users2 size={15} className={`shrink-0 ${["attendees", "pending", "organizations", "sponsors", "exhibitors", "speakers"].includes(currentView) ? "text-blue-600" : "text-slate-400 group-hover:text-blue-600"}`} />
                   <span>{t("dash.attendees", "All Attendees")}</span>
                 </div>
-                <span className="text-[10px] font-bold text-slate-400">{participantsOpen ? "−" : "+"}</span>
+                <ChevronDown size={11} className={`text-slate-400 transition-transform ${participantsOpen ? "rotate-180" : ""}`} />
               </button>
 
               {participantsOpen && (
@@ -1846,6 +2162,7 @@ export function HomeContent() {
 
           {currentView === "floor-plan" && isEditingFloorPlan && (
             <FloorPlanModifier 
+              key={activeFloorPlanId}
               exhibitors={exhibitors.map(ex => {
                 const org = organizations.find(o => String(o.id) === String(ex.org_id));
                 return {
@@ -1900,12 +2217,18 @@ export function HomeContent() {
               submissions={formSubmissions}
               tickets={tickets}
               onSaveForm={async (form) => {
-                const saved = await upsertForm(form, activeEventId);
-                setForms(prev => {
-                  const exists = prev.some(f => f.id === saved.id);
-                  return exists ? prev.map(f => f.id === saved.id ? saved : f) : [saved, ...prev];
-                });
+                try {
+                  const saved = await upsertForm(form, activeEventId);
+                  setForms(prev => {
+                    const exists = prev.some(f => f.id === saved.id || f.id === form.id);
+                    return exists ? prev.map(f => (f.id === saved.id || f.id === form.id) ? saved : f) : [saved, ...prev];
+                  });
+                  return saved;
+                } catch (err) {
+                  console.error("Failed to save form:", err);
+                }
               }}
+
               onArchiveForm={async (formId) => {
                 await archiveForm(formId);
                 setForms(prev => prev.map(f => f.id === formId ? { ...f, status: 'archived', isArchived: true } : f));

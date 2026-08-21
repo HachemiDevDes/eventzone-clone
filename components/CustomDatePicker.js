@@ -61,7 +61,14 @@ export default function CustomDatePicker({
         setPopupAlign("left");
       } else {
         const rect = containerRef.current.getBoundingClientRect();
-        if (rect.right + 200 > window.innerWidth || rect.left > 240) {
+        const parent = containerRef.current.closest('aside, main, form, [class*="overflow"]') || document.body;
+        const parentRect = parent ? parent.getBoundingClientRect() : { right: window.innerWidth, left: 0 };
+        
+        const popupWidth = 270;
+        const fitsLeft = (rect.left + popupWidth) <= Math.min(parentRect.right, window.innerWidth);
+        const fitsRight = (rect.right - popupWidth) >= Math.max(parentRect.left, 0);
+
+        if (!fitsLeft && fitsRight) {
           setPopupAlign("right");
         } else {
           setPopupAlign("left");
@@ -222,7 +229,7 @@ export default function CustomDatePicker({
 
       {/* Floating Popup Calendar */}
       {isOpen && (
-        <div className={`absolute top-full ${popupAlign === "right" ? "right-0" : "left-0"} mt-2 z-50 bg-white border border-slate-200 rounded-3xl shadow-xl p-4 w-72 animate-fade-in`}>
+        <div className={`absolute top-full ${popupAlign === "right" ? "right-0" : "left-0"} mt-2 z-50 bg-white border border-slate-200 rounded-3xl shadow-xl p-4 w-[270px] max-w-[calc(100vw-32px)] animate-fade-in`}>
           {/* Calendar Header: Month & Year + Nav */}
           <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
             <div className="flex items-center gap-1.5">

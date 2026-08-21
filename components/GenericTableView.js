@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { 
   Users, Ticket, Building2, 
   Award, Briefcase, Mic, Search, Trash2, Check, X,
   Calendar, Upload, Plus, BarChart4, Pencil, Mail, FileText,
-  Printer, QrCode, Layers, Archive, RotateCcw
+  Printer, QrCode, Layers, Archive, RotateCcw,
+  Eye, Phone, Clock, CheckCircle2, XCircle, Sparkles, Filter, Info, ShieldCheck, ArrowUpRight,
+  Maximize2, User, Download
 } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
 import { logCommunication, fetchCommunications } from "../lib/db";
@@ -193,14 +195,593 @@ function EventDetailsView({ state, onUpdateState, onUploadFile }) {
   );
 }
 
-// 2. ALL ATTENDEES VIEW
+// Helper to resolve an attendee's or applicant's effective ticket tier name
+export function getResolvedTicketName(item, tickets = []) {
+  if (!item) return "Standard Admission";
+  // If only 1 ticket tier exists for this event, all attendees belong to it
+  if (tickets && tickets.length === 1) {
+    return tickets[0].name || tickets[0].tier || "Standard Admission";
+  }
+  const itemType = (item.ticketType || item.ticket_type || "").trim().toLowerCase();
+  if (item.ticketId) {
+    const byId = (tickets || []).find(t => t.id === item.ticketId);
+    if (byId) return byId.name || byId.tier;
+  }
+  const directMatch = (tickets || []).find(t => (t.name || t.tier || "").trim().toLowerCase() === itemType);
+  if (directMatch) return directMatch.name || directMatch.tier;
+  
+  // Fuzzy word matching
+  const itemWords = itemType.split(/\s+/).filter(w => w.length > 2);
+  for (const t of (tickets || [])) {
+    const tName = (t.name || t.tier || "").trim().toLowerCase();
+    const tWords = tName.split(/\s+/).filter(w => w.length > 2);
+    const shared = tWords.filter(w => itemWords.includes(w));
+    if (shared.length >= Math.min(2, tWords.length) && shared.length > 0) {
+      return t.name || t.tier;
+    }
+  }
+
+  return item.ticketType || item.ticket_type || ((tickets && tickets[0]) ? (tickets[0].name || tickets[0].tier) : "Standard Admission");
+}
+
+// Helper to extract image URL from answers or object properties
+export function extractImageFromAnswers(answers = {}) {
+  if (!answers || typeof answers !== "object") return "";
+  for (const [k, v] of Object.entries(answers)) {
+    if (typeof v === "string" && v.trim()) {
+      const val = v.trim();
+      if (val.startsWith("data:image/") || val.startsWith("http://") || val.startsWith("https://") || val.startsWith("blob:") || val.includes("/storage/v1/object/")) {
+        return val;
+      }
+      const kLower = k.toLowerCase();
+      if (kLower.includes("picture") || kLower.includes("photo") || kLower.includes("avatar") || kLower.includes("image")) {
+        return val;
+      }
+    }
+  }
+  return "";
+}
+
+// Extract the best uploaded display photo for attendee / applicant
+export function getAttendeeDisplayImage(item) {
+  if (!item) return "";
+  if (item.image && typeof item.image === "string" && item.image.trim() && !item.image.includes("ui-avatars.com")) return item.image.trim();
+  if (item.avatar && typeof item.avatar === "string" && item.avatar.trim() && !item.avatar.includes("ui-avatars.com")) return item.avatar.trim();
+  if (item.photo && typeof item.photo === "string" && item.photo.trim()) return item.photo.trim();
+  if (item.badgePicture && typeof item.badgePicture === "string" && item.badgePicture.trim()) return item.badgePicture.trim();
+  
+  const answers = item.answers || item.customAnswers || item.formAnswers || {};
+  const extracted = extractImageFromAnswers(answers);
+  if (extracted) return extracted;
+
+  if (item.image && typeof item.image === "string" && item.image.trim()) return item.image.trim();
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || 'Attendee')}&background=random`;
+}
+
+// Fullscreen Photo Lightbox Inspector Modal
+function ImageLightboxModal({ preview, onClose }) {
+  if (!preview) return null;
+  return (
+    <div 
+      className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-150"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white border border-slate-200/80 rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col animate-in zoom-in-95 duration-150"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="p-4 px-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-650 shrink-0 font-bold text-sm">
+              <User size={16} />
+            </div>
+            <div className="min-w-0">
+              <h4 className="text-sm font-bold text-slate-900 truncate">{preview.name || "Attendee Picture"}</h4>
+              <p className="text-xs text-slate-500 truncate">{preview.email || preview.ticket}</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-slate-200/80 hover:bg-slate-300 text-slate-600 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Photo Body */}
+        <div className="p-6 flex flex-col items-center justify-center bg-slate-900/5 min-h-[300px]">
+          <div className="relative max-w-sm w-full rounded-2xl overflow-hidden shadow-xl border border-slate-200 bg-white flex items-center justify-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img 
+              src={preview.url} 
+              alt={preview.name} 
+              className="w-full max-h-[55vh] object-contain"
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 px-6 border-t border-slate-100 bg-white flex items-center justify-between">
+          <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 font-bold text-xs">
+            {preview.ticket || "Attendee Pass Photo"}
+          </span>
+          <div className="flex items-center gap-2">
+            <a 
+              href={preview.url} 
+              download={`${preview.name || 'attendee'}-photo`} 
+              target="_blank" 
+              rel="noreferrer"
+              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <Download size={13} />
+              <span>Download</span>
+            </a>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-indigo-650 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Dynamic Column Generator from Active Form Fields + Historical Deleted Form Fields
+function getDynamicFormColumns(selectedTicketType, tickets = [], forms = [], dataset = []) {
+  let relevantForms = [];
+  const activeForms = (forms || []).filter(f => f.status !== "archived" && !f.isArchived);
+
+  if (selectedTicketType && selectedTicketType !== "all") {
+    const matchedTicket = (tickets || []).find(t => (t.name === selectedTicketType || t.tier === selectedTicketType || t.id === selectedTicketType));
+    if (matchedTicket?.formId || matchedTicket?.form_id) {
+      const form = activeForms.find(f => f.id === (matchedTicket.formId || matchedTicket.form_id));
+      if (form) relevantForms.push(form);
+    }
+    if (relevantForms.length === 0) {
+      const defaultForm = activeForms.find(f => f.type === "ticket_registration" || f.category === "Registration" || f.category === "tickets");
+      if (defaultForm) relevantForms.push(defaultForm);
+    }
+  } else {
+    relevantForms = activeForms.filter(f => f.category === "Registration" || f.category === "tickets" || f.type === "ticket_registration" || !f.category || (tickets || []).some(t => t.formId === f.id || t.form_id === f.id));
+  }
+
+  const dynamicColumns = [];
+  const seenKeys = new Set();
+
+  const isExcludedKey = (k, label = "") => {
+    const idNorm = (k || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const labelNorm = (label || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+    // Exclude core fixed columns: Name, Email, Ticket Tier, Status, Dates, Notes, Codes
+    if (
+      idNorm === "id" || idNorm === "fcorename" || idNorm === "name" || idNorm === "fullname" || idNorm === "firstname" || idNorm === "lastname" ||
+      labelNorm === "fullname" || labelNorm === "name" || labelNorm === "firstname" || labelNorm === "lastname" || labelNorm === "applicantname" || labelNorm === "attendeename"
+    ) return true;
+
+    if (
+      idNorm === "fcoreemail" || idNorm === "email" || idNorm === "emailaddress" ||
+      labelNorm === "email" || labelNorm === "emailaddress"
+    ) return true;
+
+    if (
+      idNorm.includes("badgepicture") || idNorm.includes("badgephoto") || idNorm.includes("profilepicture") || idNorm.includes("userphoto") ||
+      labelNorm.includes("badgepicture") || labelNorm.includes("badgephoto") || labelNorm.includes("profilepicture")
+    ) return true;
+
+    if (
+      idNorm === "tickettype" || idNorm === "ticket_type" || idNorm === "tickettier" || idNorm === "ticket_tier" || idNorm === "ticket" ||
+      labelNorm === "tickettype" || labelNorm === "tickettier"
+    ) return true;
+
+    if (
+      idNorm === "status" || idNorm === "statusparticipation" || idNorm === "registereddate" || idNorm === "registeredat" || idNorm === "date" ||
+      idNorm === "isspeaker" || idNorm === "isarchived" || idNorm === "note" || idNorm === "badgecode" || idNorm === "answers" || idNorm === "customanswers" || idNorm === "formanswers"
+    ) return true;
+
+    return false;
+  };
+
+  // 1. Extract active form fields
+  if (relevantForms.length > 0) {
+    relevantForms.forEach(form => {
+      (form.fields || []).forEach(field => {
+        if (!field || !field.id || field.type === "section") return;
+
+        // Skip picture/photo/avatar/file upload types (displayed as photo avatar in column 1 + zoom modal)
+        const fieldType = (field.type || "").toLowerCase();
+        if (["picture", "photo", "image", "avatar", "file", "file_upload"].includes(fieldType)) return;
+
+        if (isExcludedKey(field.id, field.label)) return;
+
+        const idNorm = (field.id || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const labelNorm = (field.label || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const dedupeKey = idNorm.startsWith("fcore") ? idNorm.replace("fcore", "") : (idNorm.startsWith("f") && idNorm.length > 2 ? idNorm.slice(1) : idNorm);
+
+        if (!seenKeys.has(dedupeKey) && !seenKeys.has(idNorm) && !seenKeys.has(labelNorm)) {
+          seenKeys.add(dedupeKey);
+          seenKeys.add(idNorm);
+          seenKeys.add(labelNorm);
+          const cleanLabel = field.label || field.id.replace(/^f_core_|^f_/, "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+          dynamicColumns.push({
+            id: field.id,
+            baseLabel: cleanLabel,
+            label: cleanLabel,
+            type: field.type || "text",
+            options: field.options || [],
+            isDeleted: false
+          });
+        }
+      });
+    });
+  }
+
+  // 2. Discover historical fields that were deleted from the form, but still have data in past registrations
+  dataset.forEach(row => {
+    const ans = row.answers || row.customAnswers || row.formAnswers || {};
+    Object.entries(ans).forEach(([k, v]) => {
+      if (v === undefined || v === null || v === "") return;
+      if (typeof v === "string" && (v.startsWith("data:image/") || v.startsWith("blob:"))) return;
+      if (isExcludedKey(k)) return;
+
+      const idNorm = (k || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const dedupeKey = idNorm.startsWith("fcore") ? idNorm.replace("fcore", "") : (idNorm.startsWith("f") && idNorm.length > 2 ? idNorm.slice(1) : idNorm);
+
+      if (!seenKeys.has(dedupeKey) && !seenKeys.has(idNorm)) {
+        seenKeys.add(dedupeKey);
+        seenKeys.add(idNorm);
+        const baseName = k.replace(/^f_core_|^f_/, "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+        dynamicColumns.push({
+          id: k,
+          baseLabel: baseName,
+          label: `${baseName} (deleted)`,
+          type: "text",
+          isDeleted: true
+        });
+      }
+    });
+  });
+
+  return dynamicColumns;
+}
+
+function renderDynamicCellData(row, col) {
+  const ans = row.answers || row.customAnswers || row.formAnswers || {};
+  let val = ans[col.id];
+
+  if (val === undefined || val === null || val === "") {
+    val = ans[col.label];
+  }
+  
+  if (val === undefined || val === null || val === "") {
+    const cleanKey = col.id.replace(/^f_core_|^f_/, "");
+    if (ans[cleanKey] !== undefined && ans[cleanKey] !== null && ans[cleanKey] !== "") {
+      val = ans[cleanKey];
+    } else if (ans[`f_${cleanKey}`] !== undefined && ans[`f_${cleanKey}`] !== null && ans[`f_${cleanKey}`] !== "") {
+      val = ans[`f_${cleanKey}`];
+    }
+  }
+
+  if (val === undefined || val === null || val === "") {
+    const norm = (col.id || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const labelNorm = (col.label || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    
+    if (norm.includes("phone") || labelNorm.includes("phone")) {
+      val = row.phone || ans.phone || ans.f_core_phone || ans.phoneNumber;
+    } else if (norm.includes("company") || labelNorm.includes("company")) {
+      val = row.company || ans.company || ans.f_company || ans.organization;
+    } else if (norm.includes("job") || labelNorm.includes("job") || labelNorm.includes("title")) {
+      val = row.jobTitle || row.job_title || ans.jobTitle || ans.job_title || ans.f_job_title;
+    } else {
+      val = row[col.id];
+    }
+  }
+
+  if (val === undefined || val === null || val === "") {
+    return <span className="text-slate-300 font-normal">—</span>;
+  }
+
+  // Never render raw image/data URL string in cell
+  if (typeof val === "string" && (val.startsWith("data:image/") || val.startsWith("blob:") || val.includes("/storage/v1/object/"))) {
+    return <span className="text-slate-300 font-normal">—</span>;
+  }
+
+  if (Array.isArray(val)) {
+    return (
+      <div className="flex flex-wrap gap-1 max-w-[180px]">
+        {val.map((item, idx) => (
+          <span key={idx} className="bg-slate-100 text-slate-700 text-[10px] px-2 py-0.5 rounded-md font-semibold">
+            {String(item)}
+          </span>
+        ))}
+      </div>
+    );
+  }
+
+  if (typeof val === "boolean") {
+    return val ? (
+      <span className="text-emerald-600 font-bold flex items-center gap-1"><Check size={12} /> Yes</span>
+    ) : (
+      <span className="text-slate-400 font-medium">No</span>
+    );
+  }
+
+  const str = String(val);
+  return (
+    <span className="text-slate-700 font-medium truncate max-w-[160px] block" title={str}>
+      {str}
+    </span>
+  );
+}
+
+// Full Submission & Intake Form Inspector Modal
+function SubmissionDetailsModal({ item, type = "attendee", forms = [], tickets = [], onClose, onApprove, onDecline }) {
+  if (!item) return null;
+
+  const [previewPhoto, setPreviewPhoto] = useState(false);
+  const ticketName = getResolvedTicketName(item, tickets);
+  const matchedTicket = (tickets || []).find(t => t.name === ticketName || t.tier === ticketName || t.id === ticketName);
+  const matchedForm = matchedTicket?.formId 
+    ? (forms || []).find(f => f.id === (matchedTicket.formId || matchedTicket.form_id))
+    : null;
+
+  const answers = item.answers || item.customAnswers || item.formAnswers || {};
+  const answerEntries = Object.entries(answers);
+  const displayImg = getAttendeeDisplayImage(item);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
+        {/* Header */}
+        <div className="p-6 border-b border-slate-150 flex items-center justify-between bg-slate-50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-650 font-black text-lg">
+              <FileText size={20} />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-slate-900 leading-tight">
+                {type === "pending" ? "Pending Registration Intake" : "Attendee Registration Details"}
+              </h3>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                Full registration questionnaire responses and contact details
+              </p>
+            </div>
+          </div>
+          <button 
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-slate-200/80 hover:bg-slate-300 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Content Body */}
+        <div className="p-6 overflow-y-auto space-y-6">
+          {/* Identity & Ticket Summary Card */}
+          <div className="bg-gradient-to-br from-indigo-50/70 via-slate-50 to-emerald-50/30 border border-indigo-100/80 rounded-2xl p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPreviewPhoto(true)}
+                  className="relative group/modalavatar cursor-zoom-in shrink-0 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                  title="Click to view full photo"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img 
+                    src={displayImg} 
+                    className="w-14 h-14 rounded-2xl object-cover border border-indigo-200 shadow-inner group-hover/modalavatar:ring-2 group-hover/modalavatar:ring-indigo-500 transition-all" 
+                    alt="" 
+                  />
+                  <div className="absolute inset-0 bg-slate-900/35 rounded-2xl opacity-0 group-hover/modalavatar:opacity-100 flex items-center justify-center transition-opacity text-white">
+                    <Maximize2 size={16} className="drop-shadow" />
+                  </div>
+                </button>
+                <div>
+                  <h4 className="text-base font-extrabold text-slate-900 leading-snug">{item.name || "Guest Attendee"}</h4>
+                  <span className="text-xs font-semibold text-slate-500">{item.email}</span>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-3 py-1 rounded-full bg-indigo-650 text-white font-extrabold text-xs shadow-sm">
+                  {ticketName}
+                </span>
+                {type === "pending" ? (
+                  <span className="px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold flex items-center gap-1">
+                    <Clock size={12} /> Pending Review
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold flex items-center gap-1">
+                    <CheckCircle2 size={12} /> Registered
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Core Info Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-3 border-t border-indigo-100/60 text-xs">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Company / Org</span>
+                <span className="font-bold text-slate-800">{item.company || "—"}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Job Title</span>
+                <span className="font-bold text-slate-800">{item.jobTitle || item.job_title || "—"}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Phone</span>
+                <span className="font-bold text-slate-800">{item.phone || "—"}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Submitted Date</span>
+                <span className="font-bold text-slate-800">{item.date || item.registeredDate || "—"}</span>
+              </div>
+              {item.note && (
+                <div className="col-span-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Application Note</span>
+                  <span className="font-medium text-slate-700 italic">{item.note}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Questionnaire & Dynamic Form Answers */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h5 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles size={13} className="text-indigo-600" />
+                Ticket Form Questionnaire Responses
+              </h5>
+              {matchedForm && (
+                <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
+                  Form: {matchedForm.title}
+                </span>
+              )}
+            </div>
+
+            {answerEntries.length === 0 ? (
+              <div className="bg-slate-50 border border-slate-150 rounded-2xl p-6 text-center text-xs text-slate-400 font-medium">
+                No custom ticket form questions were attached or answered for this registration.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {answerEntries.map(([key, val]) => {
+                  // Resolve friendly label from matched form if available
+                  const fieldDef = matchedForm?.fields?.find(f => f.id === key);
+                  const label = fieldDef?.label || key.replace(/^f_/, "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+
+                  let displayValue = String(val);
+                  if (Array.isArray(val)) {
+                    displayValue = val.join(", ");
+                  } else if (typeof val === "boolean") {
+                    displayValue = val ? "Yes" : "No";
+                  }
+
+                  return (
+                    <div key={key} className="bg-slate-50 border border-slate-150 rounded-xl p-3.5 flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                        {label}
+                      </span>
+                      <span className="text-xs font-bold text-slate-900 leading-snug">
+                        {displayValue || "—"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer Actions */}
+        <div className="p-5 border-t border-slate-150 bg-slate-50 flex items-center justify-between gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
+          >
+            Close
+          </button>
+
+          {type === "pending" && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => onDecline && onDecline(item.id)}
+                className="px-4 py-2.5 bg-rose-50 hover:bg-rose-600 border border-rose-200 hover:border-rose-600 text-rose-700 hover:text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
+              >
+                Decline Application
+              </button>
+              <button
+                onClick={() => onApprove && onApprove(item)}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition-all cursor-pointer shadow-md hover:shadow-lg flex items-center gap-1.5"
+              >
+                <Check size={14} className="stroke-[3]" />
+                Approve & Issue Pass
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {previewPhoto && (
+        <ImageLightboxModal
+          preview={{
+            url: displayImg,
+            name: item.name || 'Attendee',
+            email: item.email || '',
+            ticket: ticketName
+          }}
+          onClose={() => setPreviewPhoto(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// 2. ALL ATTENDEES VIEW (Dynamic Form Columns + Ticket-Type Switcher)
 function AttendeesView({ state, onUpdateState, onOpenModal }) {
-  const { attendees } = state;
+  const { attendees = [], tickets = [], forms = [] } = state;
   const [search, setSearch] = useState("");
   const [tabFilter, setTabFilter] = useState("active"); // "active" | "archived" | "all"
+  const [selectedTicketType, setSelectedTicketType] = useState("all");
+  const [selectedSubmissionModal, setSelectedSubmissionModal] = useState(null);
+  const [previewImageModal, setPreviewImageModal] = useState(null);
+
+  // Helper to match an attendee to a ticket tier (handles exact match, ID match, or name aliases)
+  const isAttendeeInTicketTier = (item, targetTicketName) => {
+    if (!targetTicketName || targetTicketName === "all") return true;
+    
+    // If only 1 ticket tier configured for this event, all attendees belong to it
+    if ((tickets || []).length === 1) {
+      const singleTicketName = tickets[0].name || tickets[0].tier;
+      if (singleTicketName && singleTicketName.trim().toLowerCase() === targetTicketName.trim().toLowerCase()) {
+        return true;
+      }
+    }
+
+    const resolved = getResolvedTicketName(item, tickets);
+    if (resolved && resolved.trim().toLowerCase() === targetTicketName.trim().toLowerCase()) {
+      return true;
+    }
+
+    const itemType = (item.ticketType || item.ticket_type || "").trim().toLowerCase();
+    const target = targetTicketName.trim().toLowerCase();
+    return itemType === target;
+  };
+
+  // Available Ticket Types for Switcher Pills (Authoritative from tickets)
+  const ticketTypes = useMemo(() => {
+    const list = [{ id: "all", label: "All Tickets" }];
+    const seen = new Set();
+    
+    // Official tickets configured for the event are the primary source of truth
+    (tickets || []).forEach(t => {
+      const name = t.name || t.tier;
+      if (name && !seen.has(name.toLowerCase())) {
+        seen.add(name.toLowerCase());
+        list.push({ id: name, label: name });
+      }
+    });
+
+    // If tickets list is empty, derive from attendees
+    if ((tickets || []).length === 0) {
+      (attendees || []).forEach(a => {
+        const tType = a.ticketType || a.ticket_type;
+        if (tType && !seen.has(tType.toLowerCase())) {
+          seen.add(tType.toLowerCase());
+          list.push({ id: tType, label: tType });
+        }
+      });
+    }
+
+    return list;
+  }, [tickets, attendees]);
 
   const handleArchive = (id) => {
-    if (confirm("Archive this attendee? (Record will be safely preserved in archives)")) {
+    if (confirm("Archive this attendee? Their registration record is preserved in archives.")) {
       onUpdateState("attendees", attendees.map(a => a.id === id ? { ...a, status: 'archived', isArchived: true } : a));
     }
   };
@@ -209,53 +790,108 @@ function AttendeesView({ state, onUpdateState, onOpenModal }) {
     onUpdateState("attendees", attendees.map(a => a.id === id ? { ...a, status: 'registered', isArchived: false } : a));
   };
 
-  const filtered = attendees.filter(a => {
-    const isArchived = a.status === 'archived' || a.isArchived;
-    if (tabFilter === "active" && isArchived) return false;
-    if (tabFilter === "archived" && !isArchived) return false;
-    return (
-      (a.name || "").toLowerCase().includes(search.toLowerCase()) ||
-      (a.email || "").toLowerCase().includes(search.toLowerCase())
-    );
-  });
+  // Filtered Attendees by Ticket Type, Status, and Search
+  const filtered = useMemo(() => {
+    const seen = new Set();
+    return attendees.filter(a => {
+      if (a.id) {
+        if (seen.has(a.id)) return false;
+        seen.add(a.id);
+      }
+
+      const isArchived = a.status === 'archived' || a.isArchived;
+      if (tabFilter === "active" && isArchived) return false;
+      if (tabFilter === "archived" && !isArchived) return false;
+
+      if (selectedTicketType !== "all" && !isAttendeeInTicketTier(a, selectedTicketType)) return false;
+
+      const searchLower = search.toLowerCase();
+      const nameMatch = (a.name || "").toLowerCase().includes(searchLower);
+      const emailMatch = (a.email || "").toLowerCase().includes(searchLower);
+      const compMatch = (a.company || "").toLowerCase().includes(searchLower);
+      
+      // Also search through answer values
+      const ansValues = Object.values(a.answers || a.customAnswers || {}).join(" ").toLowerCase();
+      const ansMatch = ansValues.includes(searchLower);
+
+      return nameMatch || emailMatch || compMatch || ansMatch;
+    });
+  }, [attendees, tabFilter, selectedTicketType, search, tickets]);
 
   const activeCount = attendees.filter(a => a.status !== 'archived' && !a.isArchived).length;
   const archivedCount = attendees.filter(a => a.status === 'archived' || a.isArchived).length;
 
+  // Dynamic Form Columns for the selected ticket type & dataset
+  const dynamicCols = useMemo(() => {
+    return getDynamicFormColumns(selectedTicketType, tickets, forms, filtered);
+  }, [selectedTicketType, tickets, forms, filtered]);
+
   return (
     <div className="flex flex-col gap-6 w-full">
-      <header className="flex justify-between items-center select-none">
+      <header className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 select-none">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">All Attendees</h2>
-          <p className="text-sm text-slate-500">Manage list of registered participants and ticket tiers.</p>
+          <p className="text-sm text-slate-500">Manage list of registered participants, dynamic form data, and ticket tiers.</p>
         </div>
         <button 
           onClick={() => onOpenModal("attendee")}
-          className="bg-indigo-650 hover:bg-indigo-700 text-white font-semibold py-2.5 px-4 rounded-xl text-sm transition-all hover:shadow duration-200 cursor-pointer"
+          className="bg-indigo-650 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shadow-sm transition-all cursor-pointer self-start sm:self-auto"
         >
-          Add Attendee
+          <Plus size={16} />
+          <span>Add Attendee</span>
         </button>
       </header>
 
+      {/* Clean Minimalist Ticket-Type Switcher Pills */}
+      <div className="flex items-center gap-1.5 p-1 bg-slate-100/80 rounded-2xl border border-slate-200/70 w-fit max-w-full overflow-x-auto select-none shadow-inner">
+        {ticketTypes.map(tt => {
+          const count = tt.id === "all" 
+            ? attendees.length 
+            : attendees.filter(a => isAttendeeInTicketTier(a, tt.id)).length;
+          const isSelected = selectedTicketType === tt.id;
+
+          return (
+            <button
+              key={tt.id}
+              onClick={() => setSelectedTicketType(tt.id)}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-150 cursor-pointer ${
+                isSelected
+                  ? "bg-white text-slate-900 shadow-sm font-bold border border-slate-200/80"
+                  : "text-slate-500 hover:text-slate-800 hover:bg-white/60 border border-transparent"
+              }`}
+            >
+              <span>{tt.label}</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-bold transition-colors ${
+                isSelected ? "bg-slate-100 text-slate-700" : "text-slate-400 bg-transparent"
+              }`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       <div className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden flex flex-col">
-        {/* Toolbar search & filter */}
-        <div className="p-5 border-b border-slate-150 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="relative w-full max-w-sm">
+        {/* Toolbar (Search + Status Filter Tabs) */}
+        <div className="p-5 border-b border-slate-150 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="relative w-full max-w-md">
             <Search className="absolute left-3.5 top-3 text-slate-400" size={16} />
             <input 
               type="text" 
-              placeholder="Search attendees by name or email..." 
+              placeholder="Search attendees by name, email, company, or answer..." 
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-slate-200 bg-white rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-650"
+              className="w-full pl-10 pr-4 py-2 border border-slate-200 bg-white rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 shadow-sm"
             />
           </div>
 
-          <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200 self-stretch sm:self-auto">
+          <div className="flex items-center gap-1.5 bg-slate-200/60 p-1 rounded-xl self-start sm:self-auto border border-slate-200/70 select-none">
             <button
               onClick={() => setTabFilter("active")}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                tabFilter === "active" ? "bg-indigo-650 text-white" : "text-slate-500 hover:text-slate-800"
+                tabFilter === "active" 
+                  ? "bg-white text-slate-800 shadow-sm" 
+                  : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
               }`}
             >
               Active ({activeCount})
@@ -263,7 +899,9 @@ function AttendeesView({ state, onUpdateState, onOpenModal }) {
             <button
               onClick={() => setTabFilter("archived")}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                tabFilter === "archived" ? "bg-slate-700 text-white" : "text-slate-500 hover:text-slate-800"
+                tabFilter === "archived" 
+                  ? "bg-white text-slate-800 shadow-sm" 
+                  : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
               }`}
             >
               Archived ({archivedCount})
@@ -271,7 +909,9 @@ function AttendeesView({ state, onUpdateState, onOpenModal }) {
             <button
               onClick={() => setTabFilter("all")}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                tabFilter === "all" ? "bg-indigo-50 text-indigo-700" : "text-slate-500 hover:text-slate-800"
+                tabFilter === "all" 
+                  ? "bg-white text-slate-800 shadow-sm" 
+                  : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
               }`}
             >
               All ({attendees.length})
@@ -279,121 +919,183 @@ function AttendeesView({ state, onUpdateState, onOpenModal }) {
           </div>
         </div>
 
-        {/* Responsive Table */}
+        {/* Dynamic Table */}
         <div className="overflow-x-auto w-full">
           <table className="w-full border-collapse text-left text-xs font-medium text-slate-700">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-150 text-[10px] text-slate-400 font-bold uppercase tracking-wider select-none">
-                <th className="py-4 px-6">Attendee</th>
-                <th className="py-4 px-6">Email</th>
-                <th className="py-4 px-6">Ticket Type</th>
-                <th className="py-4 px-6">Status</th>
-                <th className="py-4 px-6">Registered Date</th>
-                <th className="py-4 px-6 w-16">Actions</th>
+                <th className="py-4 px-6 sticky left-0 bg-slate-50 z-10 min-w-[240px] sm:min-w-[280px] whitespace-nowrap shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">Attendee</th>
+                <th className="py-4 px-6 whitespace-nowrap">Email</th>
+                {selectedTicketType === "all" && <th className="py-4 px-6 whitespace-nowrap">Ticket Tier</th>}
+                {/* Dynamic Form Columns */}
+                {dynamicCols.map(col => (
+                  <th key={col.id} className="py-4 px-6 whitespace-nowrap">
+                    <div className="flex items-center gap-1.5">
+                      <span className={col.isDeleted ? "text-slate-400 font-semibold" : "text-indigo-900/80 font-bold"}>
+                        {col.baseLabel || col.label}
+                      </span>
+                      {col.isDeleted && (
+                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200 font-bold lowercase tracking-normal">
+                          (deleted)
+                        </span>
+                      )}
+                    </div>
+                  </th>
+                ))}
+                <th className="py-4 px-6 whitespace-nowrap">Status</th>
+                <th className="py-4 px-6 whitespace-nowrap">Registered</th>
+                <th className="py-4 px-6 text-center w-28 whitespace-nowrap sticky right-0 bg-slate-50 z-10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="text-center text-slate-450 py-12">
-                    {tabFilter === "archived" ? "No archived attendees." : "No attendees registered yet."}
+                  <td colSpan={5 + (selectedTicketType === "all" ? 1 : 0) + dynamicCols.length} className="text-center text-slate-450 py-14">
+                    {tabFilter === "archived" 
+                      ? "No archived attendees found." 
+                      : selectedTicketType !== "all" 
+                        ? `No attendees registered for ${selectedTicketType}.` 
+                        : "No attendees registered yet."}
                   </td>
                 </tr>
               ) : (
-                filtered.map(a => {
+                filtered.map((a, idx) => {
                   const isArchived = a.status === 'archived' || a.isArchived;
+                  const displayImg = getAttendeeDisplayImage(a);
                   return (
-                    <tr key={a.id} className={`hover:bg-slate-50/55 transition-colors duration-150 ${isArchived ? 'opacity-70 bg-slate-50/30' : ''}`}>
-                      <td className="py-4 px-6 font-semibold flex items-center gap-3">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img 
-                          src={a.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(a.name)}&background=random`} 
-                          className="w-8 h-8 rounded-full object-cover shadow-inner" 
-                          alt="" 
-                        />
-                        <span className="text-slate-800 font-bold">{a.name}</span>
+                    <tr key={a.id ? `${a.id}-${idx}` : `attendee-${idx}`} className={`group hover:bg-slate-50 transition-colors duration-150 ${isArchived ? 'opacity-70 bg-slate-50/50' : ''}`}>
+                      <td className="py-4 px-6 font-semibold flex items-center gap-3 sticky left-0 bg-white group-hover:bg-slate-50 z-10 min-w-[240px] sm:min-w-[280px] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                        <button 
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPreviewImageModal({
+                              url: displayImg,
+                              name: a.name || 'Attendee',
+                              email: a.email || '',
+                              ticket: getResolvedTicketName(a, tickets)
+                            });
+                          }}
+                          className="relative group/avatar cursor-zoom-in shrink-0 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                          title="Click to view full photo"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img 
+                            src={displayImg} 
+                            className="w-9 h-9 rounded-full object-cover shadow-inner border border-slate-200 group-hover/avatar:ring-2 group-hover/avatar:ring-indigo-500 transition-all" 
+                            alt="" 
+                          />
+                          <div className="absolute inset-0 bg-slate-900/35 rounded-full opacity-0 group-hover/avatar:opacity-100 flex items-center justify-center transition-opacity text-white">
+                            <Maximize2 size={12} className="drop-shadow" />
+                          </div>
+                        </button>
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <span className="text-slate-800 font-bold leading-tight whitespace-nowrap">{a.name}</span>
+                          {a.company && <span className="text-[10px] text-slate-400 font-medium truncate">{a.company}</span>}
+                        </div>
                       </td>
-                      <td className="py-4 px-6 text-slate-500 font-semibold">{a.email}</td>
-                      <td className="py-4 px-6 font-bold text-slate-800">{a.ticketType}</td>
+                      <td className="py-4 px-6 text-slate-500 font-medium">{a.email}</td>
+                      {selectedTicketType === "all" && (
+                        <td className="py-4 px-6 font-bold text-slate-800 whitespace-nowrap">
+                          <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-extrabold uppercase tracking-tight">
+                            {getResolvedTicketName(a, tickets)}
+                          </span>
+                        </td>
+                      )}
+                      {/* Dynamic Columns Cell Render */}
+                      {dynamicCols.map(col => (
+                        <td key={col.id} className="py-4 px-6 whitespace-nowrap">
+                          {renderDynamicCellData(a, col)}
+                        </td>
+                      ))}
                       <td className="py-4 px-6">
                         <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
                           isArchived 
                             ? 'bg-slate-100 text-slate-600 border border-slate-200' 
                             : a.status === 'checked-in' 
-                              ? 'bg-emerald-50 text-emerald-700' 
-                              : 'bg-indigo-50 text-indigo-600'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                              : 'bg-indigo-50 text-indigo-600 border border-indigo-100'
                         }`}>
                           {isArchived ? 'ARCHIVED' : (a.status === 'checked-in' ? 'checked in' : 'registered')}
                         </span>
                       </td>
-                      <td className="py-4 px-6 text-slate-400 font-bold">{a.registeredDate}</td>
-                      <td className="py-4 px-6 text-center flex items-center justify-center gap-1">
-                        {!isArchived && (
-                          <>
-                            <button 
-                              onClick={() => {
-                                const name = prompt("Select session index/title or leave blank to make attendee a speaker globally? (You can assign them directly to sessions in the Calendar tab)");
-                                if (name !== null) {
-                                  if (state.sessions && state.sessions.length > 0) {
-                                    const options = state.sessions.map((s, i) => `${i + 1}: ${s.title}`).join("\n");
-                                    const choice = prompt(`Enter session index (1 to ${state.sessions.length}) to assign them as speaker:\n\n${options}`);
-                                    if (choice) {
-                                      const idx = parseInt(choice) - 1;
-                                      if (idx >= 0 && idx < state.sessions.length) {
-                                        const targetSession = state.sessions[idx];
-                                        const updatedSpeakers = [...(targetSession.speakers || [])];
-                                        if (!updatedSpeakers.find(sp => sp.name === a.name)) {
-                                          updatedSpeakers.push({
-                                            id: Date.now(),
-                                            name: a.name,
-                                            image: a.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(a.name)}&background=random`
-                                          });
-                                          const updatedSessions = state.sessions.map((s, i) => i === idx ? { ...s, speakers: updatedSpeakers } : s);
-                                          onUpdateState("sessions", updatedSessions);
-                                          alert(`Successfully added ${a.name} as a speaker to "${targetSession.title}"!`);
-                                        } else {
-                                          alert(`${a.name} is already a speaker in this session.`);
+                      <td className="py-4 px-6 text-slate-400 font-medium whitespace-nowrap">{a.registeredDate || "—"}</td>
+                      <td className="py-4 px-6 text-center whitespace-nowrap sticky right-0 bg-white group-hover:bg-slate-50 z-10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => setSelectedSubmissionModal(a)}
+                            className="p-1.5 hover:text-indigo-600 text-slate-400 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 rounded-lg transition-all cursor-pointer"
+                            title="View Full Form Intake Responses"
+                          >
+                            <Eye size={15} />
+                          </button>
+
+                          {!isArchived && (
+                            <>
+                              <button 
+                                onClick={() => {
+                                  const name = prompt("Select session index/title or leave blank to make attendee a speaker globally? (You can assign them directly to sessions in the Calendar tab)");
+                                  if (name !== null) {
+                                    if (state.sessions && state.sessions.length > 0) {
+                                      const options = state.sessions.map((s, i) => `${i + 1}: ${s.title}`).join("\n");
+                                      const choice = prompt(`Enter session index (1 to ${state.sessions.length}) to assign them as speaker:\n\n${options}`);
+                                      if (choice) {
+                                        const idx = parseInt(choice) - 1;
+                                        if (idx >= 0 && idx < state.sessions.length) {
+                                          const targetSession = state.sessions[idx];
+                                          const updatedSpeakers = [...(targetSession.speakers || [])];
+                                          if (!updatedSpeakers.find(sp => sp.name === a.name)) {
+                                            updatedSpeakers.push({
+                                              id: Date.now(),
+                                              name: a.name,
+                                              image: a.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(a.name)}&background=random`
+                                            });
+                                            const updatedSessions = state.sessions.map((s, i) => i === idx ? { ...s, speakers: updatedSpeakers } : s);
+                                            onUpdateState("sessions", updatedSessions);
+                                            alert(`Successfully added ${a.name} as a speaker to "${targetSession.title}"!`);
+                                          } else {
+                                            alert(`${a.name} is already a speaker in this session.`);
+                                          }
+                                          return;
                                         }
-                                        return;
                                       }
                                     }
+                                    alert("Attendee made a speaker! You can now assign them to sessions on the Calendar page.");
                                   }
-                                  alert("Attendee made a speaker! You can now assign them to sessions on the Calendar page.");
-                                }
-                              }}
-                              className="px-2 py-1 hover:text-emerald-650 text-slate-450 hover:bg-emerald-50 border border-transparent hover:border-emerald-100 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
-                              title="Assign Speaker to Session"
-                            >
-                              Assign
-                            </button>
+                                }}
+                                className="px-2 py-1 hover:text-emerald-650 text-slate-450 hover:bg-emerald-50 border border-transparent hover:border-emerald-100 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
+                                title="Assign Speaker to Session"
+                              >
+                                Assign
+                              </button>
+                              <button 
+                                onClick={() => onOpenModal("attendee", a)}
+                                className="px-2 py-1 hover:text-indigo-650 text-slate-450 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
+                                title="Edit Attendee"
+                              >
+                                Edit
+                              </button>
+                            </>
+                          )}
+                          {isArchived ? (
                             <button 
-                              onClick={() => onOpenModal("attendee", a)}
-                              className="px-2 py-1 hover:text-indigo-650 text-slate-450 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
-                              title="Edit Attendee"
+                              onClick={() => handleRestore(a.id)}
+                              className="px-2 py-1 text-emerald-600 hover:bg-emerald-50 border border-transparent hover:border-emerald-100 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1"
+                              title="Restore Attendee"
                             >
-                              Edit
+                              <RotateCcw size={11} />
+                              <span>Restore</span>
                             </button>
-                          </>
-                        )}
-                        {isArchived ? (
-                          <button 
-                            onClick={() => handleRestore(a.id)}
-                            className="px-2 py-1 text-emerald-600 hover:bg-emerald-50 border border-transparent hover:border-emerald-100 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1"
-                            title="Restore Attendee"
-                          >
-                            <RotateCcw size={11} />
-                            <span>Restore</span>
-                          </button>
-                        ) : (
-                          <button 
-                            onClick={() => handleArchive(a.id)}
-                            className="px-2 py-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 border border-transparent hover:border-amber-100 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1"
-                            title="Archive Attendee (Soft delete - data preserved)"
-                          >
-                            <Archive size={11} />
-                            <span>Archive</span>
-                          </button>
-                        )}
+                          ) : (
+                            <button 
+                              onClick={() => handleArchive(a.id)}
+                              className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 border border-transparent hover:border-amber-100 rounded-lg transition-all cursor-pointer"
+                              title="Archive Attendee (Soft delete - data preserved)"
+                            >
+                              <Archive size={14} />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -403,87 +1105,362 @@ function AttendeesView({ state, onUpdateState, onOpenModal }) {
           </table>
         </div>
       </div>
+
+      {/* Full Submission Modal */}
+      {selectedSubmissionModal && (
+        <SubmissionDetailsModal
+          item={selectedSubmissionModal}
+          type="attendee"
+          forms={forms}
+          tickets={tickets}
+          onClose={() => setSelectedSubmissionModal(null)}
+        />
+      )}
+
+      {/* Full Resolution Photo Lightbox Inspector */}
+      {previewImageModal && (
+        <ImageLightboxModal
+          preview={previewImageModal}
+          onClose={() => setPreviewImageModal(null)}
+        />
+      )}
     </div>
   );
 }
 
-// 3. PENDING REGISTRATIONS VIEW
+// 3. PENDING REGISTRATIONS VIEW (Dynamic Form Columns + Ticket-Type Switcher)
 function PendingView({ state, onUpdateState }) {
-  const { pending, attendees } = state;
+  const { pending = [], attendees = [], tickets = [], forms = [] } = state;
+  const [search, setSearch] = useState("");
+  const [selectedTicketType, setSelectedTicketType] = useState("all");
+  const [selectedSubmissionModal, setSelectedSubmissionModal] = useState(null);
+  const [previewImageModal, setPreviewImageModal] = useState(null);
+
+  // Helper to match a pending applicant to a ticket tier (handles exact match, ID match, or name aliases)
+  const isPendingInTicketTier = (item, targetTicketName) => {
+    if (!targetTicketName || targetTicketName === "all") return true;
+    
+    // If only 1 ticket tier configured for this event, all applicants belong to it
+    if ((tickets || []).length === 1) {
+      const singleTicketName = tickets[0].name || tickets[0].tier;
+      if (singleTicketName && singleTicketName.trim().toLowerCase() === targetTicketName.trim().toLowerCase()) {
+        return true;
+      }
+    }
+
+    const resolved = getResolvedTicketName(item, tickets);
+    if (resolved && resolved.trim().toLowerCase() === targetTicketName.trim().toLowerCase()) {
+      return true;
+    }
+
+    const itemType = (item.ticketType || item.ticket_type || "").trim().toLowerCase();
+    const target = targetTicketName.trim().toLowerCase();
+    return itemType === target;
+  };
+
+  // Ticket Types Switcher for Pending Queue (Authoritative from tickets)
+  const ticketTypes = useMemo(() => {
+    const list = [{ id: "all", label: "All Tickets" }];
+    const seen = new Set();
+    
+    // Official tickets configured for the event
+    (tickets || []).forEach(t => {
+      const name = t.name || t.tier;
+      if (name && !seen.has(name.toLowerCase())) {
+        seen.add(name.toLowerCase());
+        list.push({ id: name, label: name });
+      }
+    });
+
+    if ((tickets || []).length === 0) {
+      (pending || []).forEach(p => {
+        const tType = p.ticketType || p.ticket_type;
+        if (tType && !seen.has(tType.toLowerCase())) {
+          seen.add(tType.toLowerCase());
+          list.push({ id: tType, label: tType });
+        }
+      });
+    }
+
+    return list;
+  }, [tickets, pending]);
 
   const handleDecline = (id) => {
     if (confirm("Decline this registration request?")) {
       onUpdateState("pending", pending.filter(p => p.id !== id));
+      if (selectedSubmissionModal?.id === id) {
+        setSelectedSubmissionModal(null);
+      }
     }
   };
 
   const handleApprove = (p) => {
-    // Approve and add to attendees list
+    const nameParts = (p.name || 'Guest Attendee').trim().split(' ');
+    const userImg = getAttendeeDisplayImage(p);
+    const answersData = p.answers || p.customAnswers || p.formAnswers || {};
     const newAttendee = {
-      id: Date.now(),
-      name: p.name,
-      email: p.email,
-      ticketType: "Standard Admission",
+      id: p.id || Date.now(),
+      name: p.name || 'Guest Attendee',
+      first_name: nameParts[0] || 'Guest',
+      last_name: nameParts.slice(1).join(' ') || 'Attendee',
+      email: p.email || '',
+      ticketType: p.ticketType || p.ticket_type || "Standard Admission",
+      ticket_type: p.ticketType || p.ticket_type || "Standard Admission",
+      company: p.company || answersData.company || answersData.f_company || '',
+      jobTitle: p.jobTitle || p.job_title || answersData.jobTitle || answersData.job_title || answersData.f_job_title || '',
+      job_title: p.jobTitle || p.job_title || answersData.jobTitle || answersData.job_title || answersData.f_job_title || '',
+      phone: p.phone || answersData.phone || answersData.f_core_phone || answersData.phoneNumber || '',
       status: "registered",
+      status_participation: "registered",
       registeredDate: new Date().toISOString().split("T")[0],
-      image: ""
+      registered_at: new Date().toISOString(),
+      image: userImg,
+      avatar: userImg,
+      answers: answersData,
+      customAnswers: answersData,
+      formAnswers: answersData
     };
+
     onUpdateState("attendees", [...attendees, newAttendee]);
     onUpdateState("pending", pending.filter(x => x.id !== p.id));
+    if (selectedSubmissionModal?.id === p.id) {
+      setSelectedSubmissionModal(null);
+    }
   };
+
+  // Filtered Pending Items by Ticket Type and Search
+  const filtered = useMemo(() => {
+    const seen = new Set();
+    return pending.filter(p => {
+      if (p.id) {
+        if (seen.has(p.id)) return false;
+        seen.add(p.id);
+      }
+
+      if (selectedTicketType !== "all" && !isPendingInTicketTier(p, selectedTicketType)) return false;
+
+      const searchLower = search.toLowerCase();
+      const nameMatch = (p.name || "").toLowerCase().includes(searchLower);
+      const emailMatch = (p.email || "").toLowerCase().includes(searchLower);
+      const compMatch = (p.company || "").toLowerCase().includes(searchLower);
+      const noteMatch = (p.note || "").toLowerCase().includes(searchLower);
+
+      // Search through form answers
+      const ansValues = Object.values(p.answers || p.customAnswers || {}).join(" ").toLowerCase();
+      const ansMatch = ansValues.includes(searchLower);
+
+      return nameMatch || emailMatch || compMatch || noteMatch || ansMatch;
+    });
+  }, [pending, selectedTicketType, search, tickets]);
+
+  // Dynamic Form Columns
+  const dynamicCols = useMemo(() => {
+    return getDynamicFormColumns(selectedTicketType, tickets, forms, filtered);
+  }, [selectedTicketType, tickets, forms, filtered]);
 
   return (
     <div className="flex flex-col gap-6 w-full">
-      <header className="select-none">
-        <h2 className="text-2xl font-bold text-slate-900">Pending Approvals</h2>
-        <p className="text-sm text-slate-500">Review registrations awaiting organizer validation.</p>
+      <header className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 select-none">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-2xl font-bold text-slate-900">Pending Approvals</h2>
+            <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 font-bold text-xs">
+              {pending.length} Awaiting Review
+            </span>
+          </div>
+          <p className="text-sm text-slate-500 mt-0.5">Review registrations, intake questionnaires, and validate passes awaiting organizer approval.</p>
+        </div>
       </header>
 
-      <div className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
+      {/* Clean Minimalist Ticket-Type Filter Tabs */}
+      <div className="flex items-center gap-1.5 p-1 bg-slate-100/80 rounded-2xl border border-slate-200/70 w-fit max-w-full overflow-x-auto select-none shadow-inner">
+        {ticketTypes.map(tt => {
+          const count = tt.id === "all" 
+            ? pending.length 
+            : pending.filter(p => isPendingInTicketTier(p, tt.id)).length;
+          const isSelected = selectedTicketType === tt.id;
+
+          return (
+            <button
+              key={tt.id}
+              onClick={() => setSelectedTicketType(tt.id)}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-150 cursor-pointer ${
+                isSelected
+                  ? "bg-white text-slate-900 shadow-sm font-bold border border-slate-200/80"
+                  : "text-slate-500 hover:text-slate-800 hover:bg-white/60 border border-transparent"
+              }`}
+            >
+              <span>{tt.label}</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-bold transition-colors ${
+                isSelected ? "bg-slate-100 text-slate-700" : "text-slate-400 bg-transparent"
+              }`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden flex flex-col">
+        {/* Toolbar Search */}
+        <div className="p-5 border-b border-slate-150 bg-slate-50 flex items-center justify-between gap-3">
+          <div className="relative w-full max-w-md">
+            <Search className="absolute left-3.5 top-3 text-slate-400" size={16} />
+            <input 
+              type="text" 
+              placeholder="Search pending applicants by name, email, note, or answer..." 
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-slate-200 bg-white rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-amber-500 shadow-sm"
+            />
+          </div>
+        </div>
+
+        {/* Dynamic Table */}
         <div className="overflow-x-auto w-full">
           <table className="w-full border-collapse text-left text-xs font-semibold text-slate-700">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-150 text-[10px] text-slate-400 font-bold uppercase tracking-wider select-none">
-                <th className="py-4 px-6">Name</th>
-                <th className="py-4 px-6">Email</th>
-                <th className="py-4 px-6">Request Note</th>
-                <th className="py-4 px-6">Submitted Date</th>
-                <th className="py-4 px-6 w-40">Actions</th>
+                <th className="py-4 px-6 sticky left-0 bg-slate-50 z-10 min-w-[240px] sm:min-w-[280px] whitespace-nowrap shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">Applicant</th>
+                <th className="py-4 px-6 whitespace-nowrap">Email</th>
+                {selectedTicketType === "all" && <th className="py-4 px-6 whitespace-nowrap">Applied Tier</th>}
+                {/* Dynamic Form Columns */}
+                {dynamicCols.map(col => (
+                  <th key={col.id} className="py-4 px-6 whitespace-nowrap">
+                    <div className="flex items-center gap-1.5">
+                      <span className={col.isDeleted ? "text-slate-400 font-semibold" : "text-indigo-900/80 font-bold"}>
+                        {col.baseLabel || col.label}
+                      </span>
+                      {col.isDeleted && (
+                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200 font-bold lowercase tracking-normal">
+                          (deleted)
+                        </span>
+                      )}
+                    </div>
+                  </th>
+                ))}
+                <th className="py-4 px-6 whitespace-nowrap">Request Note</th>
+                <th className="py-4 px-6 whitespace-nowrap">Submitted</th>
+                <th className="py-4 px-6 text-center w-48 whitespace-nowrap sticky right-0 bg-slate-50 z-10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {pending.length === 0 ? (
+              {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="text-center text-slate-400 py-16 font-medium">No pending registration requests.</td>
+                  <td colSpan={5 + (selectedTicketType === "all" ? 1 : 0) + dynamicCols.length} className="text-center text-slate-400 py-16 font-medium">
+                    {selectedTicketType !== "all" 
+                      ? `No pending registration requests for ${selectedTicketType}.` 
+                      : "No pending registration requests in the review queue."}
+                  </td>
                 </tr>
               ) : (
-                pending.map(p => (
-                  <tr key={p.id} className="hover:bg-slate-50/50 transition-all duration-150">
-                    <td className="py-4 px-6 font-bold text-slate-800">{p.name}</td>
-                    <td className="py-4 px-6 text-slate-500">{p.email}</td>
-                    <td className="py-4 px-6 text-slate-450 italic font-medium leading-relaxed max-w-xs truncate">{p.note || "None"}</td>
-                    <td className="py-4 px-6 text-slate-400">{p.date}</td>
-                    <td className="py-4 px-6 flex items-center gap-2">
-                      <button 
-                        onClick={() => handleApprove(p)}
-                        className="bg-emerald-50 hover:bg-emerald-600 border border-emerald-100 hover:border-emerald-600 text-emerald-700 hover:text-white py-1.5 px-3 rounded-lg font-bold text-[11px] transition-all cursor-pointer shadow-sm hover:shadow"
-                      >
-                        Approve
-                      </button>
-                      <button 
-                        onClick={() => handleDecline(p.id)}
-                        className="bg-rose-50 hover:bg-rose-600 border border-rose-100 hover:border-rose-600 text-rose-700 hover:text-white py-1.5 px-3 rounded-lg font-bold text-[11px] transition-all cursor-pointer shadow-sm"
-                      >
-                        Decline
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                filtered.map((p, idx) => {
+                  const displayImg = getAttendeeDisplayImage(p);
+                  return (
+                    <tr key={p.id ? `${p.id}-${idx}` : `pending-${idx}`} className="group hover:bg-slate-50 transition-all duration-150">
+                      <td className="py-4 px-6 font-bold text-slate-800 sticky left-0 bg-white group-hover:bg-slate-50 z-10 min-w-[240px] sm:min-w-[280px] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                        <div className="flex items-center gap-3">
+                          <button 
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewImageModal({
+                                url: displayImg,
+                                name: p.name || 'Applicant',
+                                email: p.email || '',
+                                ticket: getResolvedTicketName(p, tickets)
+                              });
+                            }}
+                            className="relative group/avatar cursor-zoom-in shrink-0 rounded-full focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                            title="Click to view full photo"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img 
+                              src={displayImg} 
+                              className="w-9 h-9 rounded-full object-cover shadow-inner border border-slate-200 group-hover/avatar:ring-2 group-hover/avatar:ring-amber-500 transition-all" 
+                              alt="" 
+                            />
+                            <div className="absolute inset-0 bg-slate-900/35 rounded-full opacity-0 group-hover/avatar:opacity-100 flex items-center justify-center transition-opacity text-white">
+                              <Maximize2 size={12} className="drop-shadow" />
+                            </div>
+                          </button>
+                          <div className="flex flex-col min-w-0 flex-1">
+                            <span className="font-extrabold text-slate-900 leading-tight whitespace-nowrap">{p.name || "Guest Applicant"}</span>
+                            {p.company && <span className="text-[10px] text-slate-400 font-medium truncate">{p.company}</span>}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-4 px-6 text-slate-500 font-medium">{p.email}</td>
+                      {selectedTicketType === "all" && (
+                        <td className="py-4 px-6 whitespace-nowrap">
+                          <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-extrabold uppercase tracking-tight">
+                            {getResolvedTicketName(p, tickets)}
+                          </span>
+                        </td>
+                      )}
+                      {/* Dynamic Form Columns Cell Render */}
+                      {dynamicCols.map(col => (
+                        <td key={col.id} className="py-4 px-6 whitespace-nowrap">
+                          {renderDynamicCellData(p, col)}
+                        </td>
+                      ))}
+                      <td className="py-4 px-6 text-slate-500 italic font-medium leading-relaxed max-w-xs truncate">
+                        {p.note || "Standard application"}
+                      </td>
+                      <td className="py-4 px-6 text-slate-400 font-medium whitespace-nowrap">{p.date || "—"}</td>
+                      <td className="py-4 px-6 whitespace-nowrap sticky right-0 bg-white group-hover:bg-slate-50 z-10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => setSelectedSubmissionModal(p)}
+                            className="p-1.5 hover:text-indigo-600 text-slate-400 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 rounded-lg transition-all cursor-pointer"
+                            title="View Full Questionnaire & Answers"
+                          >
+                            <Eye size={15} />
+                          </button>
+                          <button 
+                            onClick={() => handleApprove(p)}
+                            className="bg-emerald-50 hover:bg-emerald-600 border border-emerald-200 hover:border-emerald-600 text-emerald-700 hover:text-white py-1.5 px-3 rounded-xl font-extrabold text-[11px] transition-all cursor-pointer shadow-sm hover:shadow flex items-center gap-1"
+                          >
+                            <Check size={12} className="stroke-[3]" />
+                            <span>Approve</span>
+                          </button>
+                          <button 
+                            onClick={() => handleDecline(p.id)}
+                            className="bg-rose-50 hover:bg-rose-600 border border-rose-200 hover:border-rose-600 text-rose-700 hover:text-white py-1.5 px-2.5 rounded-xl font-bold text-[11px] transition-all cursor-pointer shadow-sm"
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Full Submission Modal */}
+      {selectedSubmissionModal && (
+        <SubmissionDetailsModal
+          item={selectedSubmissionModal}
+          type="pending"
+          forms={forms}
+          tickets={tickets}
+          onClose={() => setSelectedSubmissionModal(null)}
+          onApprove={handleApprove}
+          onDecline={handleDecline}
+        />
+      )}
+
+      {/* Full Resolution Photo Lightbox Inspector */}
+      {previewImageModal && (
+        <ImageLightboxModal
+          preview={previewImageModal}
+          onClose={() => setPreviewImageModal(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1095,7 +2072,6 @@ function TicketsView({ state, onUpdateState, onOpenModal, onSwitchView }) {
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border border-blue-200 bg-blue-50 text-blue-700">
                       {badgeType === "thermal_qr" && "Thermal Ticket"}
-                      {badgeType === "a6" && "A6 Lanyard Badge"}
                       {badgeType === "a4" && "A4 Full Page"}
                     </span>
                     {isArchived && (

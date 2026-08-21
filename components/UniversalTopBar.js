@@ -7,6 +7,7 @@ import {
   Building2, LogOut, Plus, Smartphone, Check 
 } from "lucide-react";
 import { useLanguage } from "../lib/i18n";
+import { smoothScrollTo } from "../lib/smoothScroll";
 
 export default function UniversalTopBar({
   currentUser,
@@ -24,9 +25,10 @@ export default function UniversalTopBar({
   const [profileOpen, setProfileOpen] = useState(false);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
 
-  const handleLogoClick = () => {
+  const handleBrandClick = () => {
     if (onGoToHome) {
       onGoToHome();
+      smoothScrollTo(0, { duration: 900, easing: "easeInOutCubic" });
     } else if (typeof window !== "undefined") {
       window.location.href = "/";
     }
@@ -37,9 +39,8 @@ export default function UniversalTopBar({
       e.preventDefault();
       onGoToHome();
       setTimeout(() => {
-        const el = document.getElementById("explore");
-        if (el) el.scrollIntoView({ behavior: "smooth" });
-      }, 100);
+        smoothScrollTo("#explore", { duration: 900, offset: 70, easing: "easeInOutCubic" });
+      }, 50);
     }
   };
 
@@ -48,9 +49,8 @@ export default function UniversalTopBar({
       e.preventDefault();
       onGoToHome();
       setTimeout(() => {
-        const el = document.getElementById("featured");
-        if (el) el.scrollIntoView({ behavior: "smooth" });
-      }, 100);
+        smoothScrollTo("#featured", { duration: 900, offset: 70, easing: "easeInOutCubic" });
+      }, 50);
     }
   };
 
@@ -59,9 +59,8 @@ export default function UniversalTopBar({
       e.preventDefault();
       onGoToHome();
       setTimeout(() => {
-        const el = document.getElementById("categories");
-        if (el) el.scrollIntoView({ behavior: "smooth" });
-      }, 100);
+        smoothScrollTo("#categories", { duration: 900, offset: 70, easing: "easeInOutCubic" });
+      }, 50);
     }
   };
 
@@ -70,9 +69,8 @@ export default function UniversalTopBar({
       e.preventDefault();
       onGoToHome();
       setTimeout(() => {
-        const el = document.getElementById("mobile-app");
-        if (el) el.scrollIntoView({ behavior: "smooth" });
-      }, 100);
+        smoothScrollTo("#mobile-app", { duration: 900, offset: 70, easing: "easeInOutCubic" });
+      }, 50);
     }
   };
 
@@ -91,7 +89,7 @@ export default function UniversalTopBar({
       {/* Left: Eventzone Original Blue Logo Alone */}
       <div className="flex items-center">
         <div 
-          onClick={handleLogoClick}
+          onClick={handleBrandClick}
           className="flex items-center cursor-pointer select-none group"
           title="Eventzone Home"
         >

@@ -361,6 +361,7 @@ export default function CalendarView({
                 value={startTime}
                 onChange={setStartTime}
                 placeholder="Start time"
+                align="left"
               />
             </div>
 

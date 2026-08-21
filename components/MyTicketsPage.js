@@ -6,7 +6,7 @@ import {
   Ticket, Calendar, MapPin, QrCode, Download, 
   Printer, ArrowLeft, Search, Filter, Sparkles, 
   ExternalLink, Layers, CheckCircle2, Copy, Check, 
-  X, ShieldCheck, Share2, Eye, User, Clock, Building2
+  X, ShieldCheck, Share2, Eye, User, Clock, Building2, Lock
 } from "lucide-react";
 import QRCode from "qrcode";
 import { useLanguage } from "../lib/i18n";
@@ -271,16 +271,21 @@ export default function MyTicketsPage({
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {filteredRegistrations.map(reg => {
               const isVip = (reg.ticketType || "").toLowerCase().includes("vip");
+              const isPending = reg.status === "pending" || Boolean(reg.requiresApproval);
               const qrUrl = qrCodeUrls[reg.id];
 
               return (
                 <div 
                   key={reg.id}
-                  className="bg-white border border-slate-200/90 rounded-3xl shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col justify-between group"
+                  className={`bg-white border rounded-3xl shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col justify-between group ${
+                    isPending ? "border-amber-200/90" : "border-slate-200/90"
+                  }`}
                 >
                   {/* Top Header Strip with Tier Ribbon */}
                   <div className={`px-6 py-3.5 flex items-center justify-between border-b ${
-                    isVip 
+                    isPending
+                      ? "bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-transparent border-amber-200/60"
+                      : isVip 
                       ? "bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-amber-200/60" 
                       : "bg-gradient-to-r from-blue-600/10 via-blue-600/5 to-transparent border-slate-100"
                   }`}>
@@ -292,25 +297,38 @@ export default function MyTicketsPage({
                       }`}>
                         {reg.ticketType || "General Admission"}
                       </span>
-                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80 flex items-center gap-1">
-                        <CheckCircle2 size={11} className="stroke-[2.5]" />
-                        <span>Confirmed</span>
-                      </span>
+                      {isPending ? (
+                        <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/80 flex items-center gap-1">
+                          <Clock size={11} className="stroke-[2.5]" />
+                          <span>Pending Review</span>
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80 flex items-center gap-1">
+                          <CheckCircle2 size={11} className="stroke-[2.5]" />
+                          <span>Confirmed</span>
+                        </span>
+                      )}
                     </div>
 
-                    {/* Badge ID with Copy */}
-                    <button
-                      onClick={() => handleCopyCode(reg.badgeCode || reg.id, reg.id)}
-                      className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-100/80 hover:bg-slate-200/80 text-slate-700 text-[11px] font-mono font-bold transition-all cursor-pointer"
-                      title="Click to copy badge code"
-                    >
-                      <span>{reg.badgeCode || `#${String(reg.id).slice(0, 8)}`}</span>
-                      {copiedId === reg.id ? (
-                        <Check size={12} className="text-emerald-600" />
-                      ) : (
-                        <Copy size={12} className="text-slate-400" />
-                      )}
-                    </button>
+                    {/* Badge ID with Copy (Only if confirmed) */}
+                    {isPending ? (
+                      <span className="text-[11px] font-mono font-bold text-amber-700 bg-amber-50/80 px-2 py-1 rounded-lg border border-amber-200/60">
+                        Awaiting Approval
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleCopyCode(reg.badgeCode || reg.id, reg.id)}
+                        className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-100/80 hover:bg-slate-200/80 text-slate-700 text-[11px] font-mono font-bold transition-all cursor-pointer"
+                        title="Click to copy badge code"
+                      >
+                        <span>{reg.badgeCode || `#${String(reg.id).slice(0, 8)}`}</span>
+                        {copiedId === reg.id ? (
+                          <Check size={12} className="text-emerald-600" />
+                        ) : (
+                          <Copy size={12} className="text-slate-400" />
+                        )}
+                      </button>
+                    )}
                   </div>
 
                   {/* Main Ticket Body */}
@@ -353,56 +371,85 @@ export default function MyTicketsPage({
                       </div>
                     </div>
 
-                    {/* Right: Interactive Live QR Code */}
-                    <div className="flex flex-col items-center shrink-0">
-                      <div 
-                        onClick={() => setSelectedQrPass(reg)}
-                        className="p-2.5 bg-white border border-slate-200 rounded-2xl shadow-xs hover:shadow-md hover:border-blue-500 transition-all cursor-pointer group/qr relative"
-                        title="Click to enlarge QR Code"
-                      >
-                        {qrUrl ? (
-                          <img 
-                            src={qrUrl} 
-                            alt="QR Pass" 
-                            className="w-24 h-24 sm:w-28 sm:h-28 object-contain rounded-lg"
-                          />
-                        ) : (
-                          <div className="w-24 h-24 sm:w-28 sm:h-28 bg-slate-100 rounded-lg flex items-center justify-center">
-                            <QrCode size={32} className="text-slate-300 animate-pulse" />
-                          </div>
-                        )}
-                        <div className="absolute inset-0 bg-slate-900/60 rounded-2xl opacity-0 group-hover/qr:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-bold gap-1">
-                          <Eye size={13} />
-                          <span>Enlarge</span>
+                    {/* Right: Interactive Live QR Code or Pending Locked State */}
+                    {isPending ? (
+                      <div className="flex flex-col items-center shrink-0">
+                        <div 
+                          className="p-2.5 bg-amber-50/80 border border-amber-200/90 rounded-2xl shadow-2xs w-24 h-24 sm:w-28 sm:h-28 flex flex-col items-center justify-center text-amber-700 select-none text-center"
+                          title="Door QR pass will be unlocked upon organizer approval"
+                        >
+                          <Lock size={22} className="stroke-[2.3] mb-1 text-amber-600" />
+                          <span className="text-[9px] font-black uppercase tracking-tight">QR Locked</span>
+                          <span className="text-[8px] text-amber-800/80 leading-tight mt-0.5">Awaiting Review</span>
                         </div>
+                        <span className="text-[9px] font-bold text-amber-700 uppercase tracking-widest mt-1.5 flex items-center gap-0.5">
+                          <Clock size={10} /> Under Review
+                        </span>
                       </div>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1.5">
-                        Scan at Gate
-                      </span>
-                    </div>
+                    ) : (
+                      <div className="flex flex-col items-center shrink-0">
+                        <div 
+                          onClick={() => setSelectedQrPass(reg)}
+                          className="p-2.5 bg-white border border-slate-200 rounded-2xl shadow-xs hover:shadow-md hover:border-blue-500 transition-all cursor-pointer group/qr relative"
+                          title="Click to enlarge QR Code"
+                        >
+                          {qrUrl ? (
+                            <img 
+                              src={qrUrl} 
+                              alt="QR Pass" 
+                              className="w-24 h-24 sm:w-28 sm:h-28 object-contain rounded-lg"
+                            />
+                          ) : (
+                            <div className="w-24 h-24 sm:w-28 sm:h-28 bg-slate-100 rounded-lg flex items-center justify-center">
+                              <QrCode size={32} className="text-slate-300 animate-pulse" />
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-slate-900/60 rounded-2xl opacity-0 group-hover/qr:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-bold gap-1">
+                            <Eye size={13} />
+                            <span>Enlarge</span>
+                          </div>
+                        </div>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1.5">
+                          Scan at Gate
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Bottom Action Footer with Perforated Edge Style */}
                   <div className="px-6 py-3 bg-slate-50/70 border-t border-slate-150 flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5">
-                      {/* Printable A6 Badge Action */}
-                      <button
-                        onClick={() => setSelectedBadgePass(reg)}
-                        className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
-                        title="Print Official A6 Conference Badge"
-                      >
-                        <Printer size={13} className="text-blue-600" />
-                        <span>{t("passes.printBadge", "Print Badge")}</span>
-                      </button>
+                      {/* Printable A6 Badge Action or Locked State */}
+                      {isPending ? (
+                        <button
+                          disabled
+                          className="px-3 py-1.5 bg-slate-100 text-slate-400 border border-slate-200/80 rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-not-allowed opacity-75"
+                          title="Printable badge is locked while application is under review"
+                        >
+                          <Lock size={12} className="text-amber-600" />
+                          <span>Badge Locked</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setSelectedBadgePass(reg)}
+                          className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                          title="Print Official A6 Conference Badge"
+                        >
+                          <Printer size={13} className="text-blue-600" />
+                          <span>{t("passes.printBadge", "Print Badge")}</span>
+                        </button>
+                      )}
 
-                      {/* Download QR */}
-                      <button
-                        onClick={() => handleDownloadQR(reg)}
-                        className="p-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
-                        title={t("passes.downloadQR", "Save QR Code")}
-                      >
-                        <Download size={13} />
-                      </button>
+                      {/* Download QR (Only for confirmed passes) */}
+                      {!isPending && (
+                        <button
+                          onClick={() => handleDownloadQR(reg)}
+                          className="p-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                          title={t("passes.downloadQR", "Save QR Code")}
+                        >
+                          <Download size={13} />
+                        </button>
+                      )}
 
                       {/* Add to Calendar */}
                       <button

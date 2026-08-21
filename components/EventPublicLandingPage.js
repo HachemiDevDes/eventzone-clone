@@ -3,12 +3,12 @@
 
 import React, { useState, useEffect } from "react";
 import { 
-  Calendar, MapPin, Sparkles, ArrowRight, ArrowLeft, ArrowUp,
+  Calendar, CalendarPlus, MapPin, Sparkles, ArrowRight, ArrowLeft, ArrowUp,
   Layers, Users, Clock, Ticket, Award, CheckCircle2, 
   ExternalLink, Share2, Compass, ShieldCheck, 
-  ChevronRight, Building2, Check, Download, Mail, X, Globe, Video,
+  ChevronRight, ChevronLeft, Building2, Check, Download, Mail, X, Globe, Video,
   Star, MessageSquare, Printer, User, Briefcase, Phone, QrCode as QrIcon, FileText,
-  Tag, AlertCircle, RefreshCw, Smartphone, ChevronDown
+  Tag, AlertCircle, RefreshCw, Smartphone, ChevronDown, Lock, Image as ImageIcon, Play
 } from "lucide-react";
 import QRCode from "qrcode";
 import { useLanguage } from "../lib/i18n";
@@ -16,6 +16,10 @@ import PublicRSVPModal from "./PublicRSVPModal";
 import CountryPhoneInput from "./CountryPhoneInput";
 import { CountrySelect, CitySelect } from "./LocationInputs";
 import FormImageUploader from "./FormImageUploader";
+import FormFileUploader from "./FormFileUploader";
+import { getFormSections } from "../lib/formPresets";
+import { smoothScrollTo } from "../lib/smoothScroll";
+import { getYouTubeEmbedUrl } from "./EventDetailsView";
 
 export default function EventPublicLandingPage({
   eventId,
@@ -58,6 +62,7 @@ export default function EventPublicLandingPage({
   // RSVP / Full-Page Registration State
   const [showRsvpModal, setShowRsvpModal] = useState(false);
   const [selectedTier, setSelectedTier] = useState("Standard Admission");
+  const [tierDropdownOpen, setTierDropdownOpen] = useState(false);
   const [rsvpName, setRsvpName] = useState(currentUser?.fullName || "");
   const [rsvpEmail, setRsvpEmail] = useState(currentUser?.email || "");
   const [rsvpCompany, setRsvpCompany] = useState(currentUser?.organization || currentUser?.company || "");
@@ -65,19 +70,202 @@ export default function EventPublicLandingPage({
   const [rsvpPhone, setRsvpPhone] = useState("");
   const [rsvpLoading, setRsvpLoading] = useState(false);
   const [rsvpSuccess, setRsvpSuccess] = useState(null);
+  const [rsvpError, setRsvpError] = useState(null);
   const [qrCodeUrl, setQrCodeUrl] = useState(null);
 
+  // Get cached event details if prop is loading/syncing to eliminate flash of pictures on refresh
+  const cachedDetails = typeof window !== "undefined" ? (() => {
+    try {
+      const eid = eventId || new URLSearchParams(window.location.search).get("eventId") || "cf12bb94-0cfb-4e0c-a96c-482a5c4e9021";
+      const item = localStorage.getItem(`eventzone_cached_event_${eid}`);
+      return item ? JSON.parse(item) : null;
+    } catch { return null; }
+  })() : null;
+
+  const effectiveDetails = (eventDetails && (eventDetails.title || eventDetails.youtubeUrl || eventDetails.youtube_url || eventDetails.banner))
+    ? { ...(cachedDetails || {}), ...eventDetails }
+    : (cachedDetails || eventDetails || {});
+
   // Fallback data if event doesn't have custom sessions/exhibitors/sponsors yet
-  const title = eventDetails?.title || "International Summit 2026";
-  const tagline = eventDetails?.tagline || eventDetails?.description || "Bringing together visionary leaders, executives, and pioneers to shape the future of the industry.";
-  const location = eventDetails?.location || "Algiers International Conference Center (CIC), Algeria";
-  const startDate = eventDetails?.startDate || "2026-11-05";
-  const endDate = eventDetails?.endDate || "2026-11-08";
-  const category = eventDetails?.category || "Technology & Software";
-  const type = eventDetails?.type || "Hybrid";
-  const banner = eventDetails?.banner || "https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&w=1600&q=80";
-  const hostName = eventDetails?.hostName || "Eventzone Executive Committee";
-  const organization = eventDetails?.organization || "Global Industry Forum";
+  const title = effectiveDetails?.title || "International Summit 2026";
+  const tagline = effectiveDetails?.tagline || effectiveDetails?.description || "Bringing together visionary leaders, executives, and pioneers to shape the future of the industry.";
+  const location = effectiveDetails?.venueName || effectiveDetails?.venue_name || effectiveDetails?.location || "Main Venue";
+  const startDate = effectiveDetails?.startDate || "2026-11-05";
+  const endDate = effectiveDetails?.endDate || "2026-11-08";
+  const category = effectiveDetails?.category || "Technology & Software";
+  const type = effectiveDetails?.type || "Hybrid";
+  const banner = effectiveDetails?.banner || effectiveDetails?.cover_url || "";
+  const organizerName = effectiveDetails?.organizerName || effectiveDetails?.organizer_name || effectiveDetails?.organization || "Eventzone";
+  const organization = organizerName;
+  const hostName = effectiveDetails?.hostName || effectiveDetails?.host_name || organizerName;
+  const organizerLogo = effectiveDetails?.organizerLogo || effectiveDetails?.organizer_logo || effectiveDetails?.eventLogo || effectiveDetails?.logo || "";
+  const contactEmail = effectiveDetails?.contactEmail || effectiveDetails?.contact_email || effectiveDetails?.hostEmail || effectiveDetails?.host_email || "";
+  const contactPhone = effectiveDetails?.contactPhone || effectiveDetails?.contact_phone || "";
+  const websiteUrl = effectiveDetails?.websiteUrl || effectiveDetails?.website_url || "";
+
+  // ─── HERO MEDIA SHOWCASE & PHOTO CAROUSEL STATE ───────────────────────────
+  const youtubeUrl = 
+    effectiveDetails?.youtubeUrl || 
+    effectiveDetails?.youtube_url || 
+    effectiveDetails?.videoUrl || 
+    effectiveDetails?.video_url || 
+    effectiveDetails?.webcastUrl || 
+    effectiveDetails?.webcast_url || 
+    effectiveDetails?.streamUrl || 
+    effectiveDetails?.stream_url || 
+    effectiveDetails?.video || 
+    "";
+
+  let rawGallery = [];
+  if (Array.isArray(effectiveDetails?.gallery)) {
+    rawGallery = effectiveDetails.gallery.filter(Boolean);
+  } else if (typeof effectiveDetails?.gallery === "string" && effectiveDetails.gallery.trim()) {
+    try {
+      const parsed = JSON.parse(effectiveDetails.gallery);
+      if (Array.isArray(parsed)) {
+        rawGallery = parsed.filter(Boolean);
+      } else if (typeof parsed === "string") {
+        rawGallery = [parsed];
+      }
+    } catch {
+      rawGallery = [effectiveDetails.gallery.trim()];
+    }
+  }
+
+  const youtubeEmbedUrl = getYouTubeEmbedUrl(youtubeUrl);
+
+  const mediaItems = [];
+  if (youtubeEmbedUrl) {
+    mediaItems.push({
+      type: "video",
+      url: youtubeEmbedUrl,
+      rawUrl: youtubeUrl,
+      title: `${title} - Video Trailer`
+    });
+  }
+
+  rawGallery.forEach((img, idx) => {
+    if (img && typeof img === "string" && img.trim()) {
+      mediaItems.push({
+        type: "image",
+        url: img.trim(),
+        title: `${title} - Photo ${idx + 1}`
+      });
+    }
+  });
+
+  if (mediaItems.length === 0 && banner) {
+    mediaItems.push({
+      type: "image",
+      url: banner,
+      title: title
+    });
+  }
+
+  const [activeMediaIdx, setActiveMediaIdx] = useState(0);
+  const [touchStart, setTouchStart] = useState(null);
+  const [touchEnd, setTouchEnd] = useState(null);
+  const [isHovered, setIsHovered] = useState(false);
+
+  // When video URL is detected, ensure activeMediaIdx is pinned to 0 (the video)
+  useEffect(() => {
+    if (youtubeEmbedUrl && activeMediaIdx !== 0) {
+      setActiveMediaIdx(0);
+    }
+  }, [youtubeEmbedUrl]);
+
+  const currentMedia = mediaItems[activeMediaIdx] || mediaItems[0];
+
+  const handleNextMedia = () => {
+    setActiveMediaIdx((prev) => (prev + 1) % mediaItems.length);
+  };
+
+  const handlePrevMedia = () => {
+    setActiveMediaIdx((prev) => (prev - 1 + mediaItems.length) % mediaItems.length);
+  };
+
+  // Auto-advance photos smoothly every 5 seconds
+  // (Pauses when user hovers over carousel or when currently playing video)
+  useEffect(() => {
+    if (mediaItems.length <= 1 || isHovered) return;
+    if (currentMedia?.type === "video") return;
+
+    const timer = setInterval(() => {
+      setActiveMediaIdx((prev) => (prev + 1) % mediaItems.length);
+    }, 5000);
+
+    return () => clearInterval(timer);
+  }, [mediaItems.length, isHovered, currentMedia?.type]);
+
+  const handleTouchStart = (e) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchMove = (e) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    const minSwipeDistance = 40;
+    if (distance > minSwipeDistance) {
+      handleNextMedia();
+    } else if (distance < -minSwipeDistance) {
+      handlePrevMedia();
+    }
+  };
+
+  const formatEventDateRange = (startStr, endStr) => {
+    if (!startStr) return "";
+    
+    const parseDate = (dStr) => {
+      if (!dStr) return null;
+      if (typeof dStr === "string" && dStr.includes("-")) {
+        const parts = dStr.split("-");
+        if (parts.length >= 3) {
+          const y = parseInt(parts[0], 10);
+          const m = parseInt(parts[1], 10) - 1;
+          const d = parseInt(parts[2], 10);
+          return new Date(y, m, d);
+        }
+      }
+      const parsed = new Date(dStr);
+      return isNaN(parsed.getTime()) ? null : parsed;
+    };
+
+    const start = parseDate(startStr);
+    const end = parseDate(endStr);
+
+    const monthNames = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+
+    if (!start) return startStr;
+
+    const startMonth = monthNames[start.getMonth()];
+    const startDay = start.getDate();
+    const startYear = start.getFullYear();
+
+    if (!end || startStr === endStr || isNaN(end.getTime())) {
+      return `${startMonth} ${startDay}, ${startYear}`;
+    }
+
+    const endMonth = monthNames[end.getMonth()];
+    const endDay = end.getDate();
+    const endYear = end.getFullYear();
+
+    if (startYear === endYear) {
+      if (startMonth === endMonth) {
+        return `${startMonth} ${startDay} – ${endDay}, ${startYear}`;
+      }
+      return `${startMonth} ${startDay} – ${endMonth} ${endDay}, ${startYear}`;
+    }
+
+    return `${startMonth} ${startDay}, ${startYear} – ${endMonth} ${endDay}, ${endYear}`;
+  };
 
   // Event Countdown Timer State
   const [timeLeft, setTimeLeft] = useState({
@@ -171,11 +359,10 @@ export default function EventPublicLandingPage({
   // Find active selected ticket object
   const selectedTicket = eventTickets.find(t => t.name === selectedTier || t.tier === selectedTier || t.id === selectedTier);
 
-  // Find active ticket registration form
+  // Find active ticket registration form manually bound to selected ticket tier
   const activeTicketForm = forms.find(f => 
-    f.status === "active" && 
-    f.type === "ticket_registration" && 
-    (f.ticketId === "all" || f.ticketId === selectedTier)
+    f.status !== "archived" && !f.isArchived &&
+    (selectedTicket?.formId === f.id || selectedTicket?.form_id === f.id)
   );
 
   // Find active feedback survey form
@@ -183,6 +370,36 @@ export default function EventPublicLandingPage({
     f.status === "active" && 
     (f.type === "feedback_survey" || f.type === "session_survey")
   );
+
+  // Multi-page checkout section tracking
+  const [checkoutSectionIdx, setCheckoutSectionIdx] = useState(0);
+  const [checkoutSectionErrors, setCheckoutSectionErrors] = useState({});
+
+  const ticketFormSections = React.useMemo(() => {
+    if (!activeTicketForm || !activeTicketForm.fields || activeTicketForm.fields.length === 0) return [];
+    const customFields = activeTicketForm.fields.filter(f => !["f_core_name", "f_core_email", "f_core_phone"].includes(f.id));
+    return getFormSections(customFields);
+  }, [activeTicketForm]);
+
+  const hasMultiSections = ticketFormSections.length > 1;
+  const safeCheckoutIdx = Math.min(checkoutSectionIdx, Math.max(0, ticketFormSections.length - 1));
+  const currentCheckoutSec = ticketFormSections[safeCheckoutIdx] || { fields: [] };
+  const isCheckoutFirst = safeCheckoutIdx === 0;
+  const isCheckoutLast = !hasMultiSections || safeCheckoutIdx === ticketFormSections.length - 1;
+
+  // Extract Badge Picture URL uploaded in customAnswers (if any picture field was filled)
+  const badgePhotoUrl = React.useMemo(() => {
+    if (!customAnswers || typeof customAnswers !== "object") return null;
+    const pictureFields = (activeTicketForm?.fields || []).filter(f => f.type === "picture");
+    for (const pf of pictureFields) {
+      if (customAnswers[pf.id]) return customAnswers[pf.id];
+    }
+    const found = Object.entries(customAnswers).find(([k, v]) => {
+      if (typeof v !== "string" || !v) return false;
+      return v.startsWith("data:image/") || v.startsWith("http") || v.startsWith("blob:") || k.toLowerCase().includes("picture") || k.toLowerCase().includes("photo");
+    });
+    return found ? found[1] : null;
+  }, [customAnswers, activeTicketForm]);
 
   // Lock body scroll when registration is open to eliminate background double-scroll
   useEffect(() => {
@@ -257,6 +474,9 @@ export default function EventPublicLandingPage({
   const openRegistration = (tierName) => {
     const chosenTier = tierName || selectedTier || (eventTickets[0]?.name || eventTickets[0]?.tier || "Standard Admission");
     setSelectedTier(chosenTier);
+    setCheckoutSectionIdx(0);
+    setCheckoutSectionErrors({});
+    setRsvpError(null);
     setShowRsvpModal(true);
     setRsvpSuccess(null);
 
@@ -272,6 +492,9 @@ export default function EventPublicLandingPage({
 
   const closeRegistration = () => {
     setShowRsvpModal(false);
+    setCheckoutSectionIdx(0);
+    setCheckoutSectionErrors({});
+    setRsvpError(null);
     setRsvpSuccess(null);
 
     if (typeof window !== "undefined") {
@@ -287,6 +510,7 @@ export default function EventPublicLandingPage({
 
   const switchTicketTier = (tierName) => {
     setSelectedTier(tierName);
+    setRsvpError(null);
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       params.set("view", "register");
@@ -297,8 +521,54 @@ export default function EventPublicLandingPage({
     }
   };
 
+  const handleCheckoutNext = (e) => {
+    e?.preventDefault?.();
+    setRsvpError(null);
+    const errors = {};
+
+    // If on section 0, validate core credentials
+    if (safeCheckoutIdx === 0) {
+      if (!rsvpName?.trim()) errors["rsvpName"] = "Full name is required.";
+      if (!rsvpEmail?.trim()) errors["rsvpEmail"] = "Email address is required.";
+      if (!rsvpPhone?.trim()) errors["rsvpPhone"] = "Phone number is required.";
+    }
+
+    // Validate custom fields on current section
+    (currentCheckoutSec.fields || []).forEach(f => {
+      if (f.required && f.type !== "section") {
+        const val = customAnswers[f.id];
+        const isEmpty = val === undefined || val === null || val === "" || (Array.isArray(val) && val.length === 0);
+        if (isEmpty) {
+          errors[f.id] = "This question requires an answer.";
+        }
+      }
+    });
+
+    if (Object.keys(errors).length > 0) {
+      setCheckoutSectionErrors(errors);
+      return;
+    }
+
+    setCheckoutSectionErrors({});
+    setCheckoutSectionIdx(prev => Math.min(ticketFormSections.length - 1, prev + 1));
+  };
+
+  const handleCheckoutPrev = () => {
+    setCheckoutSectionErrors({});
+    setRsvpError(null);
+    setCheckoutSectionIdx(prev => Math.max(0, prev - 1));
+  };
+
+  const handleCheckoutClear = () => {
+    setCustomAnswers({});
+    setCheckoutSectionErrors({});
+    setRsvpError(null);
+    setCheckoutSectionIdx(0);
+  };
+
   const handleRsvpSubmit = async (e) => {
     e.preventDefault();
+    setRsvpError(null);
     setRsvpLoading(true);
 
     try {
@@ -309,30 +579,24 @@ export default function EventPublicLandingPage({
           company: rsvpCompany || currentUser?.organization || "",
           jobTitle: rsvpJobTitle || currentUser?.jobTitle || "",
           phone: rsvpPhone || "",
+          avatar: badgePhotoUrl || currentUser?.avatar || "",
+          photo: badgePhotoUrl || "",
           ticketType: selectedTier,
-          requiresApproval: Boolean(selectedTicket?.requiresApproval),
+          requiresApproval: Boolean(selectedTicket?.requiresApproval || selectedTicket?.requires_approval),
+          customAnswers: customAnswers,
+          answers: customAnswers,
           eventTitle: title,
           location: location,
           startDate: startDate,
           endDate: endDate,
         });
 
-        // Submit custom form questions if form is configured
-        if (activeTicketForm && onSubmitFormResponse) {
-          try {
-            await onSubmitFormResponse({
-              formId: activeTicketForm.id,
-              respondentName: rsvpName || currentUser?.fullName || "Attendee",
-              respondentEmail: rsvpEmail || currentUser?.email || "visitor@eventzone.io",
-              ticketTier: selectedTier,
-              answers: customAnswers
-            });
-          } catch (formErr) {
-            console.warn("Could not save form answers:", formErr);
-          }
+        if (pass && (pass.error || pass.success === false)) {
+          setRsvpError(pass.error || "An attendee with this email address or phone number is already registered for this event.");
+          return;
         }
 
-        if (pass) {
+        if (pass && pass.id) {
           const qrData = JSON.stringify({
             passId: pass.id,
             badgeCode: pass.badgeCode,
@@ -350,10 +614,11 @@ export default function EventPublicLandingPage({
           });
           setQrCodeUrl(url);
           setRsvpSuccess(pass);
+          setRsvpError(null);
         }
       }
     } catch (err) {
-      console.error("Registration error:", err);
+      setRsvpError(err?.message || "Registration conflict: This email address or phone number is already registered or pending review.");
     } finally {
       setRsvpLoading(false);
     }
@@ -392,8 +657,48 @@ export default function EventPublicLandingPage({
     });
   };
 
+  const handleScrollTo = (target) => (e) => {
+    e.preventDefault();
+    smoothScrollTo(target, { duration: 900, offset: 70, easing: "easeInOutCubic" });
+  };
+
+  const getGoogleCalendarUrl = () => {
+    try {
+      const cleanTitle = encodeURIComponent(title || "Event");
+      const cleanDetails = encodeURIComponent(
+        `${eventDetails?.description || title || ""}\n\nEvent Link: https://eventzone.pro/${eventDetails?.slug || "myevent"}\nVenue: ${location || ""}`
+      );
+      const cleanLocation = encodeURIComponent(location || "");
+
+      const formatGCalDate = (dStr, isEnd = false) => {
+        if (!dStr) return "";
+        const clean = dStr.split("T")[0];
+        const parts = clean.split("-");
+        if (parts.length === 3) {
+          const y = parseInt(parts[0], 10);
+          const m = parseInt(parts[1], 10) - 1;
+          const d = parseInt(parts[2], 10) + (isEnd ? 1 : 0);
+          const dt = new Date(Date.UTC(y, m, d));
+          const yyyy = dt.getUTCFullYear();
+          const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+          const dd = String(dt.getUTCDate()).padStart(2, "0");
+          return `${yyyy}${mm}${dd}`;
+        }
+        return dStr.replace(/[^0-9]/g, "");
+      };
+
+      const startG = formatGCalDate(startDate);
+      const endG = formatGCalDate(endDate || startDate, true);
+      const datesParam = startG && endG ? `&dates=${startG}/${endG}` : "";
+
+      return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${cleanTitle}&details=${cleanDetails}&location=${cleanLocation}${datesParam}`;
+    } catch {
+      return "https://calendar.google.com";
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-600 selection:text-white flex flex-col">
+    <div className="min-h-screen bg-white text-slate-900 font-sans selection:bg-blue-600 selection:text-white flex flex-col">
       {/* ==================================================================== */}
       {/* 1. STICKY TOP NAVBAR (LIGHT MODE)                                    */}
       {/* ==================================================================== */}
@@ -407,12 +712,12 @@ export default function EventPublicLandingPage({
 
         {/* Center: In-Page Navigation Quick Links */}
         <nav className="hidden lg:flex items-center justify-center gap-7 text-xs font-bold text-slate-600 absolute left-1/2 -translate-x-1/2">
-          <a href="#about" className="hover:text-blue-600 transition-colors">{t("event.about", "About")}</a>
-          <a href="#speakers" className="hover:text-blue-600 transition-colors">{t("event.speakers", "Speakers")}</a>
-          <a href="#schedule" className="hover:text-blue-600 transition-colors">{t("event.agenda", "Agenda")}</a>
-          <a href="#floorplan" className="hover:text-blue-600 transition-colors">{t("event.floorPlan", "Floor Plan")}</a>
-          <a href="#exhibitors" className="hover:text-blue-600 transition-colors">{t("event.exhibitors", "Exhibitors & Sponsors")}</a>
-          <a href="#tickets" className="hover:text-blue-600 transition-colors">{t("event.tickets", "Tickets")}</a>
+          <a href="#about" onClick={handleScrollTo("#about")} className="hover:text-blue-600 transition-colors cursor-pointer">{t("event.about", "About")}</a>
+          <a href="#speakers" onClick={handleScrollTo("#speakers")} className="hover:text-blue-600 transition-colors cursor-pointer">{t("event.speakers", "Speakers")}</a>
+          <a href="#schedule" onClick={handleScrollTo("#schedule")} className="hover:text-blue-600 transition-colors cursor-pointer">{t("event.agenda", "Agenda")}</a>
+          <a href="#floorplan" onClick={handleScrollTo("#floorplan")} className="hover:text-blue-600 transition-colors cursor-pointer">{t("event.floorPlan", "Floor Plan")}</a>
+          <a href="#exhibitors" onClick={handleScrollTo("#exhibitors")} className="hover:text-blue-600 transition-colors cursor-pointer">{t("event.exhibitors", "Exhibitors & Sponsors")}</a>
+          <a href="#tickets" onClick={handleScrollTo("#tickets")} className="hover:text-blue-600 transition-colors cursor-pointer">{t("event.tickets", "Tickets")}</a>
         </nav>
 
         {/* Right: Language Selector, Share, Feedback & Get Tickets Buttons */}
@@ -424,7 +729,7 @@ export default function EventPublicLandingPage({
               return (
                 <button
                   onClick={() => setLangMenuOpen(o => !o)}
-                  className="flex items-center gap-2 px-2.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all cursor-pointer shadow-xs"
+                  className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all cursor-pointer shadow-xs"
                   title="Change Language"
                 >
                   {curLang?.icon ? (
@@ -432,7 +737,6 @@ export default function EventPublicLandingPage({
                   ) : (
                     <Globe size={13} className="text-slate-500" />
                   )}
-                  <span className="uppercase tracking-wide font-extrabold text-[11px]">{lang}</span>
                   <ChevronDown size={11} className={`text-slate-400 transition-transform ${langMenuOpen ? "rotate-180" : ""}`} />
                 </button>
               );
@@ -464,35 +768,6 @@ export default function EventPublicLandingPage({
             )}
           </div>
 
-          {activeFeedbackForm && (
-            <button
-              onClick={() => {
-                setShowFeedbackModal(true);
-                setFeedbackSuccess(false);
-              }}
-              className="px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 transition-all cursor-pointer text-xs font-bold flex items-center gap-1.5 border border-amber-200/60"
-            >
-              <Star size={13} className="text-amber-500 fill-amber-500" />
-              <span>Event Survey</span>
-            </button>
-          )}
-
-          <button
-            onClick={handleShare}
-            className="px-3.5 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-all cursor-pointer text-xs font-bold shadow-xs"
-            title="Copy event link"
-          >
-            {copiedUrl ? "Link Copied!" : "Share"}
-          </button>
-
-          <button
-            onClick={openRSVP}
-            className="px-3.5 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs border border-indigo-200/80 transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
-          >
-            <CheckCircle2 size={13} className="text-indigo-600" />
-            <span>RSVP</span>
-          </button>
-
           <button
             onClick={() => openRegistration(eventTickets[0]?.name || "Standard Admission")}
             className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/20 transition-all cursor-pointer"
@@ -503,135 +778,256 @@ export default function EventPublicLandingPage({
       </header>
 
       {/* ==================================================================== */}
-      {/* 2. HERO SECTION (CINEMATIC DARK OVERLAY)                             */}
+      {/* 2. TOP MEDIA SHOWCASE (CLEAN CAROUSEL / VIDEO SHOWCASE)              */}
       {/* ==================================================================== */}
-      <section className="relative overflow-hidden bg-slate-950 text-white border-b border-slate-800 py-16 sm:py-24">
-        {/* Background Cover Image with Dark Overlay */}
-        <div className="absolute inset-0 z-0">
-          <img src={banner} alt={title} className="w-full h-full object-cover opacity-35 filter blur-xs scale-105" />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/85 to-slate-900/80" />
-        </div>
+      <section className="relative bg-white pt-6 pb-2 sm:pt-8 sm:pb-3">
+        {/* Media Frame Container - Aligned to max-w-6xl to match content below */}
+        <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div 
+            className="relative group rounded-3xl overflow-hidden bg-slate-900 border border-slate-200/90 shadow-xl shadow-slate-200/40 select-none"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+          >
+            {/* Media Player Frame (16:9 Aspect Ratio) */}
+            <div className="relative aspect-video sm:aspect-21/9 lg:aspect-16/9 max-h-[520px] w-full bg-slate-950 overflow-hidden flex items-center justify-center">
+              
+              {/* Media Items Cross-fade Transitions */}
+              {mediaItems.length === 0 ? (
+                <div className="absolute inset-0 w-full h-full bg-slate-950 flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-full border-2 border-slate-700 border-t-blue-500 animate-spin" />
+                </div>
+              ) : (
+                mediaItems.map((item, idx) => {
+                  if (item.type === "video") {
+                    if (activeMediaIdx !== idx) return null;
+                    const videoAutoplaySrc = item.url.includes("autoplay=1") 
+                      ? item.url 
+                      : `${item.url}${item.url.includes('?') ? '&' : '?'}autoplay=1&mute=1&playsinline=1&enablejsapi=1&rel=0&modestbranding=1`;
+                    return (
+                      <div key={idx} className="absolute inset-0 w-full h-full bg-slate-950 z-20">
+                        <iframe
+                          src={videoAutoplaySrc}
+                          title={item.title}
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                          allowFullScreen
+                          className="w-full h-full border-0 bg-slate-950"
+                        />
+                      </div>
+                    );
+                  }
 
-        {/* Ambient Subtle Blue Glow */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] bg-blue-600/20 rounded-full blur-3xl pointer-events-none" />
+                  return (
+                    <div
+                      key={idx}
+                      className={`absolute inset-0 w-full h-full transition-opacity duration-700 ease-in-out overflow-hidden flex items-center justify-center ${
+                        activeMediaIdx === idx ? "opacity-100 z-10" : "opacity-0 pointer-events-none z-0"
+                      }`}
+                    >
+                      {/* Blurred Ambient Background from same image */}
+                      <div
+                        className="absolute inset-0 w-full h-full bg-cover bg-center blur-2xl scale-125 opacity-75 filter"
+                        style={{ backgroundImage: `url("${item.url}")` }}
+                      />
+                      {/* Soft dark vignette overlay */}
+                      <div className="absolute inset-0 bg-black/40 backdrop-blur-xs pointer-events-none" />
 
-        <div className="relative z-10 max-w-4xl mx-auto px-6 sm:px-8 text-center space-y-6 flex flex-col items-center">
-          {/* Main Event Title */}
-          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-tight max-w-3xl">
-            {title}
-          </h1>
+                      {/* Foreground Sharp Contained Original Image */}
+                      <img
+                        src={item.url}
+                        alt={item.title}
+                        className="relative z-10 w-full h-full object-contain object-center drop-shadow-2xl"
+                      />
+                    </div>
+                  );
+                })
+              )}
 
-          {/* Event Narrative / Tagline */}
-          <p className="text-slate-300 text-base sm:text-lg font-normal leading-relaxed max-w-2xl mx-auto">
-            {tagline}
-          </p>
+              {/* Left/Right Navigation Chevrons (Discreet Minimalist Buttons) */}
+              {mediaItems.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePrevMedia();
+                    }}
+                    className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-black/40 hover:bg-black/75 text-white/80 hover:text-white flex items-center justify-center backdrop-blur-md border border-white/15 opacity-60 hover:opacity-100 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer z-30 shadow-md"
+                    aria-label="Previous Slide"
+                  >
+                    <ChevronLeft size={18} strokeWidth={2} className="-translate-x-0.5" />
+                  </button>
 
-          {/* Date & Location Metadata */}
-          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs sm:text-sm font-semibold text-slate-200 pt-1">
-            <div className="flex items-center gap-2 bg-slate-900/80 backdrop-blur-md px-4 py-2 rounded-2xl border border-slate-800 shadow-sm">
-              <Calendar size={16} className="text-blue-400 shrink-0" />
-              <span>{startDate} — {endDate}</span>
-            </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleNextMedia();
+                    }}
+                    className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-black/40 hover:bg-black/75 text-white/80 hover:text-white flex items-center justify-center backdrop-blur-md border border-white/15 opacity-60 hover:opacity-100 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer z-30 shadow-md"
+                    aria-label="Next Slide"
+                  >
+                    <ChevronRight size={18} strokeWidth={2} className="translate-x-0.5" />
+                  </button>
+                </>
+              )}
 
-            <div className="flex items-center gap-2 bg-slate-900/80 backdrop-blur-md px-4 py-2 rounded-2xl border border-slate-800 shadow-sm">
-              <MapPin size={16} className="text-blue-400 shrink-0" />
-              <span className="truncate max-w-xs sm:max-w-md">{location}</span>
+              {/* Floating Slide Counter / Badge */}
+              {mediaItems.length > 1 && (
+                <div className="absolute top-4 right-4 z-30">
+                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-black/60 backdrop-blur-md text-white border border-white/20 shadow-md">
+                    {activeMediaIdx + 1} / {mediaItems.length}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
+        </div>
+      </section>
 
-          {/* Live Countdown Timer Widget */}
-          {timeLeft.status === "upcoming" && (
-            <div className="pt-2 pb-1 space-y-2.5 animate-fade-in">
-              <div className="text-[11px] font-extrabold uppercase tracking-widest text-blue-400/90 flex items-center justify-center gap-1.5">
-                <Clock size={13} className="text-blue-400" />
-                <span>{t("event.startsIn", "Event Starts In")}</span>
-              </div>
+      {/* ==================================================================== */}
+      {/* 2B. EVENT MAIN HEADER INFO & COUNTDOWN TIMER BAR                     */}
+      {/* ==================================================================== */}
+      <section className="bg-white border-b border-slate-200 pt-7 pb-10 sm:pt-9 sm:pb-14">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
+            
+            {/* ── LEFT COLUMN: TITLE, DATE, LOCATION & ORGANIZER DETAILS ── */}
+            <div className="lg:col-span-7 xl:col-span-8 space-y-6 text-left">
+              
+              {/* Main Event Title */}
+              <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-tight">
+                {title}
+              </h1>
 
-              <div className="flex items-center justify-center gap-2 sm:gap-3.5">
-                {/* Days */}
-                <div className="flex flex-col items-center justify-center min-w-[62px] sm:min-w-[74px] py-2.5 px-3 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 shadow-lg">
-                  <span className="text-2xl sm:text-3xl font-black text-white font-mono tracking-tight">
-                    {String(timeLeft.days).padStart(2, '0')}
-                  </span>
-                  <span className="text-[10px] sm:text-[11px] uppercase font-bold text-blue-300 tracking-wider mt-0.5">
-                    {t("event.days", "Days")}
-                  </span>
+              {/* Clean Date, Time & Location Block */}
+              <div className="space-y-6 pt-2">
+                
+                {/* Dates & Horaires */}
+                <div className="space-y-3">
+                  <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                    {lang === "fr" ? "Dates & Horaires" : t("event.datesTime", "Date & time")}
+                  </h3>
+                  <div className="space-y-2.5 text-sm sm:text-base text-slate-700 font-medium">
+                    <div className="flex items-center gap-2.5">
+                      <Calendar size={20} className="text-slate-400 shrink-0" />
+                      <span>{formatEventDateRange(startDate, endDate)}</span>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <Clock size={20} className="text-slate-400 shrink-0" />
+                      <span>{eventDetails?.scheduleTime || "08:00 AM - 05:00 PM"}</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 pt-0.5">
+                      <CalendarPlus size={18} className="text-blue-600 shrink-0" />
+                      <a
+                        href={getGoogleCalendarUrl()}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:text-blue-700 hover:underline font-semibold text-sm"
+                      >
+                        {t("event.addToCalendar", "Add to Calendar")}
+                      </a>
+                    </div>
+                  </div>
                 </div>
 
-                <span className="text-lg sm:text-2xl font-bold text-white/40 -mt-3">:</span>
-
-                {/* Hours */}
-                <div className="flex flex-col items-center justify-center min-w-[62px] sm:min-w-[74px] py-2.5 px-3 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 shadow-lg">
-                  <span className="text-2xl sm:text-3xl font-black text-white font-mono tracking-tight">
-                    {String(timeLeft.hours).padStart(2, '0')}
-                  </span>
-                  <span className="text-[10px] sm:text-[11px] uppercase font-bold text-blue-300 tracking-wider mt-0.5">
-                    {t("event.hours", "Hours")}
-                  </span>
+                {/* Localisation */}
+                <div className="space-y-3">
+                  <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                    {lang === "fr" ? "Localisation" : t("event.location", "Location")}
+                  </h3>
+                  <div className="space-y-2.5 text-sm sm:text-base text-slate-700 font-medium">
+                    <div className="flex items-start gap-2.5">
+                      <MapPin size={20} className="text-slate-400 shrink-0 mt-0.5" />
+                      <span className="leading-snug">{location}</span>
+                    </div>
+                  </div>
                 </div>
 
-                <span className="text-lg sm:text-2xl font-bold text-white/40 -mt-3">:</span>
-
-                {/* Minutes */}
-                <div className="flex flex-col items-center justify-center min-w-[62px] sm:min-w-[74px] py-2.5 px-3 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 shadow-lg">
-                  <span className="text-2xl sm:text-3xl font-black text-white font-mono tracking-tight">
-                    {String(timeLeft.minutes).padStart(2, '0')}
-                  </span>
-                  <span className="text-[10px] sm:text-[11px] uppercase font-bold text-blue-300 tracking-wider mt-0.5">
-                    {t("event.minutes", "Min")}
-                  </span>
-                </div>
-
-                <span className="text-lg sm:text-2xl font-bold text-white/40 -mt-3">:</span>
-
-                {/* Seconds */}
-                <div className="flex flex-col items-center justify-center min-w-[62px] sm:min-w-[74px] py-2.5 px-3 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 shadow-lg">
-                  <span className="text-2xl sm:text-3xl font-black text-white font-mono tracking-tight">
-                    {String(timeLeft.seconds).padStart(2, '0')}
-                  </span>
-                  <span className="text-[10px] sm:text-[11px] uppercase font-bold text-blue-300 tracking-wider mt-0.5">
-                    {t("event.seconds", "Sec")}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {timeLeft.status === "live" && (
-            <div className="pt-2 pb-1 animate-fade-in">
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-extrabold backdrop-blur-md">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                <span>{t("event.eventLiveNow", "EVENT IS LIVE NOW — JOIN SESSIONS & EXPO")}</span>
               </div>
             </div>
-          )}
 
-          {timeLeft.status === "concluded" && (
-            <div className="pt-2 pb-1 animate-fade-in">
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-white/10 border border-white/15 text-slate-300 text-xs font-bold backdrop-blur-md">
-                <span>{t("event.soldOut", "Event Concluded")}</span>
+            {/* ── RIGHT COLUMN: COMPACT TICKET CARD (IMAGE 1 STYLE) ── */}
+            <div className="lg:col-span-5 xl:col-span-4 w-full">
+              <div className="sticky top-20 bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-lg shadow-slate-100/70 space-y-3.5 text-left">
+                
+                {/* Ticket Tier Selector Card */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (eventTickets.length > 1) {
+                        setTierDropdownOpen((prev) => !prev);
+                      } else {
+                        openRegistration(selectedTicket?.name || "Standard Admission");
+                      }
+                    }}
+                    className="w-full border border-slate-200/90 hover:border-blue-400 bg-white hover:bg-slate-50/50 rounded-xl p-3.5 flex items-center justify-between text-left transition-all cursor-pointer group shadow-2xs"
+                  >
+                    <div className="space-y-0.5">
+                      <h4 className="text-sm sm:text-base font-bold text-slate-900 leading-tight">
+                        {selectedTicket?.name || selectedTicket?.tier || "VIP"}
+                      </h4>
+                      <p className="text-xs sm:text-sm font-semibold text-blue-600">
+                        {selectedTicket?.price && Number(selectedTicket.price) > 0 
+                          ? `$${selectedTicket.price}` 
+                          : (lang === "fr" ? "Gratuit" : (lang === "ar" ? "مجاني" : "Free"))}
+                      </p>
+                    </div>
+
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 group-hover:text-blue-600 transition-colors">
+                      <ChevronRight size={18} className="transition-transform group-hover:translate-x-0.5" />
+                    </div>
+                  </button>
+
+                  {/* Multiple Tiers Dropdown Menu */}
+                  {tierDropdownOpen && eventTickets.length > 1 && (
+                    <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 z-40 space-y-1 animate-scale-up">
+                      {eventTickets.map((t, idx) => (
+                        <button
+                          key={t.id || idx}
+                          type="button"
+                          onClick={() => {
+                            setSelectedTier(t.name || t.tier);
+                            setTierDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-3 py-2.5 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                            (selectedTicket?.name === t.name || selectedTicket?.id === t.id)
+                              ? "bg-blue-50 text-blue-700 font-bold border border-blue-200/60"
+                              : "hover:bg-slate-50 text-slate-700 font-medium"
+                          }`}
+                        >
+                          <div>
+                            <span className="block font-bold text-slate-900">{t.name || t.tier}</span>
+                            <span className="text-[11px] text-blue-600 font-semibold">
+                              {t.price && Number(t.price) > 0 ? `$${t.price}` : (lang === "fr" ? "Gratuit" : "Free")}
+                            </span>
+                          </div>
+                          {(selectedTicket?.name === t.name || selectedTicket?.id === t.id) && (
+                            <Check size={14} className="text-blue-600 shrink-0" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Primary Action Button ("Get Tickets") */}
+                <button
+                  type="button"
+                  onClick={() => openRegistration(selectedTicket?.name || "Standard Admission")}
+                  className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm shadow-md shadow-blue-600/25 hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center text-center"
+                >
+                  <span>
+                    {t("event.getPass", "Get Tickets")}
+                  </span>
+                </button>
+
               </div>
             </div>
-          )}
 
-          {/* Primary Call to Action Buttons */}
-          <div className="pt-4 flex flex-wrap items-center justify-center gap-3">
-            <button
-              onClick={openRSVP}
-              className="inline-flex items-center gap-2.5 px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl font-bold text-sm shadow-xl shadow-blue-600/40 transition-all cursor-pointer group"
-            >
-              <CheckCircle2 size={18} className="group-hover:scale-110 transition-transform text-blue-200" />
-              <span>{t("rsvp.publicRsvpNow", "RSVP Attendance")}</span>
-              <ChevronRight size={16} />
-            </button>
-
-            <a
-              href="#tickets"
-              className="inline-flex items-center gap-2 px-6 py-4 bg-white/10 hover:bg-white/20 text-white rounded-2xl font-bold text-sm backdrop-blur-md border border-white/15 transition-all cursor-pointer"
-            >
-              <Ticket size={16} />
-              <span>{t("event.registerNow", "View Passes")}</span>
-            </a>
           </div>
         </div>
       </section>
@@ -676,9 +1072,22 @@ export default function EventPublicLandingPage({
               </h2>
             </div>
 
-            <p className="text-slate-600 text-sm sm:text-base leading-relaxed font-normal">
-              {eventDetails?.description || "This premier summit gathers international executives, technical pioneers, and regulatory leaders for in-depth keynote presentations, exhibition showcases, and high-level networking sessions."}
-            </p>
+            {eventDetails?.description ? (
+              eventDetails.description.includes("<") && eventDetails.description.includes(">") ? (
+                <div 
+                  className="text-slate-600 text-sm sm:text-base leading-relaxed font-normal space-y-2.5 [&_h1]:text-2xl [&_h1]:font-black [&_h1]:text-slate-900 [&_h1]:my-2 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-slate-900 [&_h2]:my-2 [&_h3]:text-base [&_h3]:font-bold [&_h3]:text-slate-900 [&_h3]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1.5 [&_blockquote]:border-l-4 [&_blockquote]:border-blue-500 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:my-2 [&_blockquote]:text-slate-600"
+                  dangerouslySetInnerHTML={{ __html: eventDetails.description }}
+                />
+              ) : (
+                <p className="text-slate-600 text-sm sm:text-base leading-relaxed font-normal whitespace-pre-line">
+                  {eventDetails.description}
+                </p>
+              )
+            ) : (
+              <p className="text-slate-600 text-sm sm:text-base leading-relaxed font-normal">
+                This premier summit gathers international executives, technical pioneers, and regulatory leaders for in-depth keynote presentations, exhibition showcases, and high-level networking sessions.
+              </p>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
               <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-1.5">
@@ -702,37 +1111,87 @@ export default function EventPublicLandingPage({
           {/* Organizer Card */}
           <div className="lg:col-span-5 bg-white border border-slate-200 rounded-3xl p-6 sm:p-7 shadow-xs space-y-5 text-left">
             <div className="flex items-center gap-3.5 pb-4 border-b border-slate-100">
-              <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white font-extrabold text-lg flex items-center justify-center shadow-md shadow-blue-600/20">
-                {organization.charAt(0)}
-              </div>
-              <div>
+              {organizerLogo ? (
+                <img
+                  src={organizerLogo}
+                  alt={organizerName}
+                  className="w-12 h-12 rounded-2xl object-cover border border-slate-200 shadow-xs shrink-0"
+                />
+              ) : (
+                <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white font-extrabold text-lg flex items-center justify-center shadow-md shadow-blue-600/20 shrink-0">
+                  {organizerName.charAt(0).toUpperCase() || "E"}
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
                 <span className="text-[10px] font-extrabold text-blue-600 uppercase tracking-wider block">Presented By</span>
-                <h4 className="text-sm font-bold text-slate-900">{organization}</h4>
-                <span className="text-xs text-slate-400 font-medium">{hostName}</span>
+                <h4 className="text-sm font-bold text-slate-900 truncate">{organizerName}</h4>
+                {hostName && hostName !== organizerName && (
+                  <span className="text-xs text-slate-400 font-medium block truncate">{hostName}</span>
+                )}
               </div>
             </div>
 
             <div className="space-y-2.5 text-xs text-slate-600 font-medium">
-              <div className="flex items-center gap-2">
-                <ShieldCheck size={15} className="text-emerald-600 shrink-0" />
+              <div className="flex items-center gap-2.5">
+                <ShieldCheck size={16} className="text-emerald-600 shrink-0" />
                 <span>Officially Registered Organizer</span>
               </div>
-              <div className="flex items-center gap-2">
-                <Mail size={15} className="text-blue-600 shrink-0" />
-                <span>{eventDetails?.hostEmail || "organizer@eventzone.io"}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Globe size={15} className="text-blue-600 shrink-0" />
-                <span>https://{eventDetails?.slug || "myevent"}.eventzone.io</span>
-              </div>
+
+              {contactEmail ? (
+                <div className="flex items-center gap-2.5">
+                  <Mail size={16} className="text-blue-600 shrink-0" />
+                  <a
+                    href={`mailto:${contactEmail}`}
+                    className="text-slate-700 hover:text-blue-600 hover:underline transition-colors truncate"
+                  >
+                    {contactEmail}
+                  </a>
+                </div>
+              ) : null}
+
+              {contactPhone ? (
+                <div className="flex items-center gap-2.5">
+                  <Phone size={16} className="text-blue-600 shrink-0" />
+                  <a
+                    href={`tel:${contactPhone}`}
+                    className="text-slate-700 hover:text-blue-600 hover:underline transition-colors truncate"
+                  >
+                    {contactPhone}
+                  </a>
+                </div>
+              ) : null}
+
+              {websiteUrl && websiteUrl.trim() && !websiteUrl.includes("localhost") ? (
+                <div className="flex items-center gap-2.5">
+                  <Globe size={16} className="text-blue-600 shrink-0" />
+                  <a
+                    href={websiteUrl.startsWith("http") ? websiteUrl : `https://${websiteUrl}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-700 hover:underline transition-colors truncate font-semibold"
+                  >
+                    {websiteUrl.replace(/^https?:\/\//, "")}
+                  </a>
+                </div>
+              ) : null}
             </div>
 
-            <button
-              onClick={() => openRegistration(eventTickets[0]?.name || eventTickets[0]?.tier || "Standard Admission")}
-              className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
-            >
-              Contact Event Organizers
-            </button>
+            {contactEmail ? (
+              <a
+                href={`mailto:${contactEmail}?subject=${encodeURIComponent(title)}`}
+                className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer text-center block shadow-xs"
+              >
+                Contact Event Organizers
+              </a>
+            ) : (
+              <button
+                type="button"
+                onClick={() => openRegistration(eventTickets[0]?.name || eventTickets[0]?.tier || "Standard Admission")}
+                className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-xs"
+              >
+                Contact Event Organizers
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -1108,7 +1567,7 @@ export default function EventPublicLandingPage({
                 </span>
               </div>
               <p className="text-xs text-slate-400 max-w-md leading-relaxed">
-                {tagline}
+                {eventDetails?.description || "Official registration, schedule, and delegate portal."}
               </p>
               <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
                 <ShieldCheck size={14} className="text-emerald-500" />
@@ -1136,20 +1595,20 @@ export default function EventPublicLandingPage({
             <div className="space-y-3">
               <h4 className="text-xs font-extrabold text-white uppercase tracking-wider">Navigation</h4>
               <ul className="space-y-2 text-slate-400">
-                <li><a href="#about" className="hover:text-white transition-colors">About &amp; Overview</a></li>
-                <li><a href="#speakers" className="hover:text-white transition-colors">Keynote Speakers</a></li>
-                <li><a href="#schedule" className="hover:text-white transition-colors">Agenda &amp; Sessions</a></li>
-                <li><a href="#floorplan" className="hover:text-white transition-colors">Interactive Floor Plan</a></li>
-                <li><a href="#tickets" className="hover:text-white transition-colors">Passes &amp; Pricing</a></li>
+                <li><a href="#about" onClick={handleScrollTo("#about")} className="hover:text-white transition-colors cursor-pointer">About &amp; Overview</a></li>
+                <li><a href="#speakers" onClick={handleScrollTo("#speakers")} className="hover:text-white transition-colors cursor-pointer">Keynote Speakers</a></li>
+                <li><a href="#schedule" onClick={handleScrollTo("#schedule")} className="hover:text-white transition-colors cursor-pointer">Agenda &amp; Sessions</a></li>
+                <li><a href="#floorplan" onClick={handleScrollTo("#floorplan")} className="hover:text-white transition-colors cursor-pointer">Interactive Floor Plan</a></li>
+                <li><a href="#tickets" onClick={handleScrollTo("#tickets")} className="hover:text-white transition-colors cursor-pointer">Passes &amp; Pricing</a></li>
               </ul>
             </div>
 
             <div className="space-y-3">
               <h4 className="text-xs font-extrabold text-white uppercase tracking-wider">Partners &amp; Expo</h4>
               <ul className="space-y-2 text-slate-400">
-                <li><a href="#exhibitors" className="hover:text-white transition-colors">Exhibitor Directory</a></li>
-                <li><a href="#exhibitors" className="hover:text-white transition-colors">Booth Locations</a></li>
-                <li><a href="#sponsors" className="hover:text-white transition-colors">Diamond &amp; Gold Sponsors</a></li>
+                <li><a href="#exhibitors" onClick={handleScrollTo("#exhibitors")} className="hover:text-white transition-colors cursor-pointer">Exhibitor Directory</a></li>
+                <li><a href="#exhibitors" onClick={handleScrollTo("#exhibitors")} className="hover:text-white transition-colors cursor-pointer">Booth Locations</a></li>
+                <li><a href="#sponsors" onClick={handleScrollTo("#sponsors")} className="hover:text-white transition-colors cursor-pointer">Diamond &amp; Gold Sponsors</a></li>
                 <li><button onClick={() => openRegistration("VIP Access Pass")} className="hover:text-white transition-colors text-left cursor-pointer">Become a Sponsor</button></li>
                 <li><button onClick={() => openRegistration("Standard Admission")} className="hover:text-white transition-colors text-left cursor-pointer">Exhibitor Inquiries</button></li>
               </ul>
@@ -1170,7 +1629,7 @@ export default function EventPublicLandingPage({
               <h4 className="text-xs font-extrabold text-white uppercase tracking-wider">Support &amp; Trust</h4>
               <ul className="space-y-2 text-slate-400">
                 <li><span className="text-slate-300">Host: {organization}</span></li>
-                <li><span className="text-slate-300">Contact: {eventDetails?.hostEmail || "support@eventzone.io"}</span></li>
+                <li><span className="text-slate-300">Contact: {contactEmail || "support@eventzone.io"}</span></li>
                 <li><span className="text-slate-500">Privacy &amp; Data Rights</span></li>
                 <li><span className="text-slate-500">Terms of Attendance</span></li>
                 <li><span className="text-slate-500">Delegate Support 24/7</span></li>
@@ -1185,7 +1644,7 @@ export default function EventPublicLandingPage({
             </div>
 
             <button
-              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+              onClick={() => smoothScrollTo(0, { duration: 900, easing: "easeInOutCubic" })}
               className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 transition-all flex items-center gap-1.5 font-bold cursor-pointer"
             >
               <span>Back to Top</span>
@@ -1218,7 +1677,7 @@ export default function EventPublicLandingPage({
                 return (
                   <button
                     onClick={() => setLangMenuOpen(o => !o)}
-                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all cursor-pointer shadow-xs"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all cursor-pointer shadow-xs"
                     title="Change Language"
                   >
                     {curLang?.icon ? (
@@ -1226,7 +1685,6 @@ export default function EventPublicLandingPage({
                     ) : (
                       <Globe size={13} className="text-slate-500" />
                     )}
-                    <span className="uppercase tracking-wide font-extrabold text-[11px]">{lang}</span>
                     <ChevronDown size={11} className={`text-slate-400 transition-transform ${langMenuOpen ? "rotate-180" : ""}`} />
                   </button>
                 );
@@ -1265,371 +1723,566 @@ export default function EventPublicLandingPage({
               /* ============================================================ */
               /* SUCCESS STATE: OFFICIAL BADGE ISSUED OR PENDING REVIEW       */
               /* ============================================================ */
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                {/* LEFT COLUMN: Confirmation Message & Action Suite */}
-                <div className="lg:col-span-7 bg-white border border-slate-200 rounded-3xl p-6 sm:p-10 shadow-xs text-left space-y-6">
-                  {rsvpSuccess.status === "pending" ? (
-                    <div className="space-y-2">
-                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-extrabold">
-                        <Clock size={15} />
-                        <span>Application Under Review</span>
-                      </div>
-                      <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                        Registration Submitted for Approval
-                      </h2>
-                      <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                        Your registration for <strong>{selectedTier}</strong> has been received and is currently in the organizer review queue for <strong>{title}</strong>. You will be notified via email once the organizer accepts your application.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-extrabold">
-                        <CheckCircle2 size={15} />
-                        <span>Registration Confirmed</span>
-                      </div>
-                      <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                        Your Official Pass is Ready!
-                      </h2>
-                      <p className="text-xs sm:text-sm text-slate-600">
-                        Your digital conference pass has been generated and activated for <strong>{title}</strong>. Your credential badge with entrance QR code is shown on the right.
-                      </p>
-                    </div>
-                  )}
+              (() => {
+                const isPendingRegistration = rsvpSuccess.status === "pending" || Boolean(selectedTicket?.requiresApproval);
 
-                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5 text-xs">
-                    <div className="flex justify-between py-1 border-b border-slate-200/60">
-                      <span className="text-slate-500 font-medium">Attendee Name</span>
-                      <span className="font-bold text-slate-900">{rsvpName}</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-slate-200/60">
-                      <span className="text-slate-500 font-medium">Registered Email</span>
-                      <span className="font-bold text-slate-900">{rsvpEmail}</span>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-slate-200/60">
-                      <span className="text-slate-500 font-medium">Pass Tier</span>
-                      <span className="font-bold text-blue-600">{selectedTier}</span>
-                    </div>
-                    <div className="flex justify-between py-1">
-                      <span className="text-slate-500 font-medium">Digital Badge ID</span>
-                      <span className="font-mono font-bold text-emerald-700">{rsvpSuccess.badgeCode || "EZ-2026"}</span>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (typeof window !== "undefined") window.print();
-                      }}
-                      className="py-3.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
-                    >
-                      <Printer size={15} />
-                      <span>Print / Save Badge PDF</span>
-                    </button>
-
-                    {qrCodeUrl && (
-                      <a
-                        href={qrCodeUrl}
-                        download={`${(rsvpName || 'event').replace(/\s+/g, '_')}_qr_pass.png`}
-                        className="py-3.5 px-4 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs"
-                      >
-                        <Download size={15} />
-                        <span>Download QR Code</span>
-                      </a>
-                    )}
-                  </div>
-
-                  <div className="pt-2 border-t border-slate-100">
-                    <button
-                      type="button"
-                      onClick={closeRegistration}
-                      className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer text-center"
-                    >
-                      Done &amp; Return to Event Page
-                    </button>
-                  </div>
-                </div>
-
-                {/* RIGHT COLUMN: The Issued A6 Conference Badge */}
-                <div className="lg:col-span-5 flex flex-col items-center sticky top-24">
-                  <div className="w-16 h-3.5 bg-slate-300 rounded-full mx-auto border-2 border-slate-400 shadow-inner flex items-center justify-center -mb-2 z-10 relative">
-                    <div className="w-10 h-1.5 bg-slate-800 rounded-full" />
-                  </div>
-
-                  {/* A6 Proportions Badge Card */}
-                  <div className="w-full max-w-[340px] sm:max-w-[360px] bg-white rounded-3xl border-2 border-emerald-500 shadow-2xl overflow-hidden flex flex-col relative ring-8 ring-emerald-500/10">
-                    {/* Header Banner */}
-                    <div className="relative h-28 w-full overflow-hidden bg-slate-950 flex flex-col justify-between p-4">
-                      <img src={banner} alt="Cover" className="absolute inset-0 w-full h-full object-cover opacity-60" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-transparent" />
-                      <div className="relative z-10 flex items-center justify-between">
-                        <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-white/20 text-white uppercase backdrop-blur-xs">
-                          {category}
-                        </span>
-                        <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-500 text-white uppercase flex items-center gap-1 shadow-xs">
-                          <CheckCircle2 size={10} />
-                          <span>CONFIRMED PASS</span>
-                        </span>
-                      </div>
-                      <div className="relative z-10">
-                        <h4 className="text-xs font-black text-white line-clamp-1">{title}</h4>
-                      </div>
-                    </div>
-
-                    {/* Tier Ribbon */}
-                    <div className={`py-1.5 px-4 text-center text-xs font-black uppercase tracking-wider ${
-                      selectedTier.toLowerCase().includes("vip")
-                        ? "bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-500 text-slate-950"
-                        : selectedTier.toLowerCase().includes("online")
-                        ? "bg-gradient-to-r from-purple-600 to-indigo-700 text-white"
-                        : "bg-gradient-to-r from-blue-600 to-indigo-700 text-white"
-                    }`}>
-                      {selectedTier}
-                    </div>
-
-                    {/* Badge Body */}
-                    <div className="p-6 pt-2 text-center flex-1 flex flex-col items-center">
-                      <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-700 text-white flex items-center justify-center text-2xl font-black shadow-lg mx-auto border-4 border-white -mt-10 mb-2">
-                        {(rsvpName.trim() || "HM").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase() || "AM"}
-                      </div>
-
-                      <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight uppercase break-words px-2 leading-tight">
-                        {rsvpName}
-                      </h2>
-
-                      {rsvpJobTitle && (
-                        <p className="text-xs font-extrabold text-blue-600 uppercase tracking-wide mt-1">
-                          {rsvpJobTitle}
-                        </p>
+                return (
+                  <div className="max-w-xl mx-auto w-full">
+                    {/* Confirmation Message & Action Suite */}
+                    <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-10 shadow-xs text-left space-y-6">
+                      {isPendingRegistration ? (
+                        <div className="space-y-2">
+                          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                            Registration Submitted for Approval
+                          </h2>
+                          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                            Your registration for <strong>{selectedTier}</strong> has been received and is currently in the organizer review queue for <strong>{title}</strong>. You will be notified via email once the organizer accepts your application.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-extrabold">
+                            <CheckCircle2 size={15} />
+                            <span>Registration Confirmed</span>
+                          </div>
+                          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                            Your Official Pass is Ready!
+                          </h2>
+                          <p className="text-xs sm:text-sm text-slate-600">
+                            Your digital pass has been activated for <strong>{title}</strong>.
+                          </p>
+                        </div>
                       )}
 
-                      <p className="text-xs font-bold text-slate-700 mt-0.5">
-                        {rsvpCompany || organization}
-                      </p>
-
-                      <p className="text-[11px] text-slate-400 font-mono mt-0.5 truncate max-w-xs">
-                        {rsvpEmail}
-                      </p>
-
-                      {/* Official QR Code Box */}
-                      <div className="w-full bg-slate-50 rounded-2xl border border-slate-200 p-3 mt-4 flex items-center justify-between gap-3">
-                        {qrCodeUrl ? (
-                          <div className="w-20 h-20 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs shrink-0 flex items-center justify-center">
-                            <img src={qrCodeUrl} alt="QR Code" className="w-full h-full object-contain" />
-                          </div>
-                        ) : (
-                          <div className="w-20 h-20 bg-slate-200 rounded-xl animate-pulse shrink-0" />
-                        )}
-
-                        <div className="text-left flex-1 space-y-1">
-                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase">
-                            <ShieldCheck size={11} />
-                            <span>VERIFIED AT DOOR</span>
-                          </div>
-                          <div className="text-[10px] text-slate-500 font-mono font-bold">
-                            CODE: <span className="text-slate-900 font-extrabold">{rsvpSuccess.badgeCode || "EZ-PASS"}</span>
-                          </div>
-                          <div className="text-[9px] text-slate-400">
-                            Present QR upon check-in
-                          </div>
+                      <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5 text-xs">
+                        <div className="flex justify-between py-1 border-b border-slate-200/60">
+                          <span className="text-slate-500 font-medium">Attendee Name</span>
+                          <span className="font-bold text-slate-900">{rsvpName}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-200/60">
+                          <span className="text-slate-500 font-medium">Registered Email</span>
+                          <span className="font-bold text-slate-900">{rsvpEmail}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-200/60">
+                          <span className="text-slate-500 font-medium">Pass Tier</span>
+                          <span className="font-bold text-blue-600">{selectedTier}</span>
+                        </div>
+                        <div className="flex justify-between py-1 items-center">
+                          <span className="text-slate-500 font-medium">
+                            {isPendingRegistration ? "Application Status" : "Digital Badge ID"}
+                          </span>
+                          {isPendingRegistration ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-bold border border-amber-200">
+                              <Clock size={12} />
+                              <span>Pending Organizer Review</span>
+                            </span>
+                          ) : (
+                            <span className="font-mono font-bold text-emerald-700">{rsvpSuccess.badgeCode || "EZ-2026"}</span>
+                          )}
                         </div>
                       </div>
-                    </div>
 
-                    {/* Badge Footer */}
-                    <div className="px-4 py-2.5 bg-slate-900 text-white flex items-center justify-between text-[10px] font-semibold">
-                      <span>{startDate}</span>
-                      <span className="truncate max-w-[160px] text-slate-400">{location.split(',')[0]}</span>
+                      {/* Actions */}
+                      {isPendingRegistration ? (
+                        <div className="pt-2">
+                          <button
+                            type="button"
+                            onClick={closeRegistration}
+                            className="w-full py-3.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer text-center"
+                          >
+                            {t("reg.done", "Done")}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (typeof window !== "undefined") window.print();
+                              }}
+                              className="py-3.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+                            >
+                              <Printer size={15} />
+                              <span>Print / Save Badge PDF</span>
+                            </button>
+
+                            {qrCodeUrl && (
+                              <a
+                                href={qrCodeUrl}
+                                download={`${(rsvpName || 'event').replace(/\s+/g, '_')}_qr_pass.png`}
+                                className="py-3.5 px-4 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs"
+                              >
+                                <Download size={15} />
+                                <span>Download QR Code</span>
+                              </a>
+                            )}
+                          </div>
+
+                          <div className="pt-2 border-t border-slate-100">
+                            <button
+                              type="button"
+                              onClick={closeRegistration}
+                              className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer text-center"
+                            >
+                              {t("reg.done", "Done")}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
-              </div>
+                );
+              })()
             ) : (
               /* ============================================================ */
               /* REGISTRATION IN PROGRESS: CLEAN FORM LEFT, A6 BADGE RIGHT    */
               /* ============================================================ */
               <div>
-                <div className="mb-6 space-y-1.5 text-left">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-xs font-extrabold uppercase tracking-wider">
-                    <Sparkles size={13} />
-                    <span>{t("reg.passGenBadge", "Attendee Pass & Credential Generator")}</span>
-                  </div>
+                <div className="mb-6 space-y-1.5 text-left max-w-2xl mx-auto">
                   <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
                     {t("reg.title", "Event Registration")}
                   </h1>
                   <p className="text-xs sm:text-sm text-slate-500 font-medium max-w-xl">
-                    {t("reg.subtitle", "Fill in your attendee credentials on the left. Your official A6 conference badge updates in real-time on the right.")}
+                    {t("reg.subtitle", "Complete your registration details below to attend.")}
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                  {/* ======================================================== */}
-                  {/* LEFT COLUMN: CLEAN MODERN FORM                           */}
-                  {/* ======================================================== */}
-                  <div className="lg:col-span-7 bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-7 shadow-xs text-left">
-                    <form onSubmit={handleRsvpSubmit} className="space-y-5">
-                      {/* 1. TICKET PASS TIER SELECTION */}
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2.5">
-                          {t("reg.selectPassTier", "1. Select Your Pass Tier")}
-                        </label>
+                <div className="max-w-2xl mx-auto w-full">
+                  <div className="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-xs text-left">
+                    <form onSubmit={isCheckoutLast ? handleRsvpSubmit : handleCheckoutNext} className="space-y-5">
+                      
+                      {/* DUPLICATE / CONFLICT ERROR ALERT */}
+                      {rsvpError && (
+                        <div className="bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl p-4 flex items-start gap-3 animate-in fade-in zoom-in-95 duration-200">
+                          <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                          <div className="flex flex-col gap-0.5 text-xs font-semibold leading-relaxed">
+                            <span className="font-extrabold text-rose-900 text-sm">Registration Conflict</span>
+                            <span className="text-rose-700 font-medium">{rsvpError}</span>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* MULTI-SECTION STEPPER & PROGRESS (IF ACTIVE TICKET FORM HAS SECTIONS) */}
+                      {hasMultiSections && (
+                        <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 flex flex-col gap-2.5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[10px] font-extrabold uppercase tracking-wide">
+                                Section {safeCheckoutIdx + 1} of {ticketFormSections.length}
+                              </span>
+                              <span className="text-xs font-bold text-slate-800 line-clamp-1">
+                                {currentCheckoutSec.title || `Step ${safeCheckoutIdx + 1}`}
+                              </span>
+                            </div>
+                            <span className="text-[11px] font-bold text-slate-400">
+                              {Math.round(((safeCheckoutIdx + 1) / ticketFormSections.length) * 100)}% Complete
+                            </span>
+                          </div>
 
-                        {eventTickets.length > 0 ? (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {eventTickets.map((t, idx) => {
-                              const tierName = t.name || t.tier || "General Admission";
-                              const isSelected = selectedTier === tierName || selectedTier === t.id;
-                              const price = parseFloat(t.price) || 0;
-                              return (
-                                <div
-                                  key={idx}
-                                  onClick={() => switchTicketTier(tierName)}
-                                  className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
-                                    isSelected
-                                      ? "border-blue-600 bg-blue-50/50 ring-4 ring-blue-100 shadow-2xs"
-                                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                          {/* Progress Bar */}
+                          <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full transition-all duration-300"
+                              style={{ width: `${((safeCheckoutIdx + 1) / ticketFormSections.length) * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* SECTION 1 / PAGE 1: PASS TIER + CORE ATTENDEE CREDENTIALS + SECTION 1 QUESTIONS */}
+                      {(!hasMultiSections || safeCheckoutIdx === 0) && (
+                        <>
+                          {/* 1. TICKET PASS TIER SELECTION */}
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2.5">
+                              {t("reg.selectPassTier", "1. Select Your Pass Tier")}
+                            </label>
+
+                            {eventTickets.length > 0 ? (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {eventTickets.map((t, idx) => {
+                                  const tierName = t.name || t.tier || "General Admission";
+                                  const isSelected = selectedTier === tierName || selectedTier === t.id;
+                                  const price = parseFloat(t.price) || 0;
+                                  return (
+                                    <div
+                                      key={idx}
+                                      onClick={() => switchTicketTier(tierName)}
+                                      className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
+                                        isSelected
+                                          ? "border-blue-600 bg-blue-50/50 ring-4 ring-blue-100 shadow-2xs"
+                                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-xs font-extrabold text-slate-900">{tierName}</span>
+                                        <span className="text-xs font-black text-blue-600">
+                                          {price === 0 ? "Free" : `${price.toLocaleString()} DZD`}
+                                        </span>
+                                      </div>
+                                      <p className="text-[11px] text-slate-500 mt-1 line-clamp-1">
+                                        {t.description || "Full access to keynotes, sessions & networking hall"}
+                                      </p>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {["Standard Admission", "VIP Access Pass"].map((tierName) => {
+                                  const isSelected = selectedTier === tierName;
+                                  return (
+                                    <div
+                                      key={tierName}
+                                      onClick={() => switchTicketTier(tierName)}
+                                      className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
+                                        isSelected
+                                          ? "border-blue-600 bg-blue-50/50 ring-4 ring-blue-100 shadow-2xs"
+                                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-xs font-extrabold text-slate-900">{tierName}</span>
+                                        <span className="text-xs font-black text-blue-600">Free</span>
+                                      </div>
+                                      <p className="text-[11px] text-slate-500 mt-1">
+                                        {tierName.includes("VIP") ? "Includes executive lounge & priority front seating" : "Standard delegate floor badge"}
+                                      </p>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 2. ATTENDEE CREDENTIALS */}
+                          <div className="space-y-4 pt-2 border-t border-slate-100">
+                            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                              {t("reg.badgeCredentials", "2. Attendee Badge Credentials")}
+                            </label>
+
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                {t("reg.fullName", "Your Full Name")} <span className="text-rose-500">*</span>
+                              </label>
+                              <input
+                                type="text"
+                                required
+                                value={rsvpName}
+                                onChange={(e) => {
+                                  setRsvpName(e.target.value);
+                                  if (checkoutSectionErrors["rsvpName"]) {
+                                    setCheckoutSectionErrors(prev => ({ ...prev, rsvpName: undefined }));
+                                  }
+                                }}
+                                placeholder="e.g. Sarah Jenkins"
+                                className={`w-full px-3.5 py-3 bg-slate-50 border focus:bg-white rounded-xl text-xs font-semibold text-slate-900 outline-none transition-all ${
+                                  checkoutSectionErrors["rsvpName"] ? "border-rose-400 bg-rose-50/40" : "border-slate-200 focus:border-blue-600"
+                                }`}
+                              />
+                              {checkoutSectionErrors["rsvpName"] && (
+                                <p className="text-[10px] font-bold text-rose-600 mt-1">{checkoutSectionErrors["rsvpName"]}</p>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                  {t("reg.email", "Your Email Address")} <span className="text-rose-500">*</span>
+                                </label>
+                                <input
+                                  type="email"
+                                  required
+                                  value={rsvpEmail}
+                                  onChange={(e) => {
+                                    setRsvpEmail(e.target.value);
+                                    if (checkoutSectionErrors["rsvpEmail"]) {
+                                      setCheckoutSectionErrors(prev => ({ ...prev, rsvpEmail: undefined }));
+                                    }
+                                  }}
+                                  placeholder="e.g. alex@company.com"
+                                  className={`w-full px-3.5 py-3 bg-slate-50 border focus:bg-white rounded-xl text-xs font-semibold text-slate-900 outline-none transition-all ${
+                                    checkoutSectionErrors["rsvpEmail"] ? "border-rose-400 bg-rose-50/40" : "border-slate-200 focus:border-blue-600"
                                   }`}
-                                >
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-xs font-extrabold text-slate-900">{tierName}</span>
-                                    <span className="text-xs font-black text-blue-600">
-                                      {price === 0 ? "Free" : `$${price}`}
-                                    </span>
-                                  </div>
-                                  <p className="text-[11px] text-slate-500 mt-1 line-clamp-1">
-                                    {t.description || "Full access to keynotes, sessions & networking hall"}
-                                  </p>
+                                />
+                                {checkoutSectionErrors["rsvpEmail"] && (
+                                  <p className="text-[10px] font-bold text-rose-600 mt-1">{checkoutSectionErrors["rsvpEmail"]}</p>
+                                )}
+                              </div>
+
+                              <div>
+                                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                  {t("reg.phone", "Phone Number")} <span className="text-rose-500">*</span>
+                                </label>
+                                <CountryPhoneInput
+                                  value={rsvpPhone}
+                                  onChange={(val) => {
+                                    setRsvpPhone(val);
+                                    if (checkoutSectionErrors["rsvpPhone"]) {
+                                      setCheckoutSectionErrors(prev => ({ ...prev, rsvpPhone: undefined }));
+                                    }
+                                  }}
+                                  required
+                                  inputClassName="py-3"
+                                />
+                                {checkoutSectionErrors["rsvpPhone"] && (
+                                  <p className="text-[10px] font-bold text-rose-600 mt-1">{checkoutSectionErrors["rsvpPhone"]}</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Custom Questions for Section 1 (or all questions if single section) */}
+                          {(!hasMultiSections ? activeTicketForm?.fields : ticketFormSections[0]?.fields) && (
+                            <div className="border-t border-slate-100 pt-4 space-y-3">
+                              {(!hasMultiSections && activeTicketForm?.fields?.length > 0) && (
+                                <div className="text-[11px] font-bold uppercase text-blue-600 tracking-wider">
+                                  {t("reg.additionalQuestions", "3. Additional Registration Questions")}
                                 </div>
-                              );
-                            })}
+                              )}
+
+                              {((!hasMultiSections ? activeTicketForm?.fields : ticketFormSections[0]?.fields) || [])
+                                .filter(f => !["f_core_name", "f_core_email", "f_core_phone"].includes(f.id) && f.type !== "section")
+                                .map(field => {
+                                  const hasError = Boolean(checkoutSectionErrors[field.id]);
+                                  return (
+                                    <div key={field.id} className={`p-3 rounded-2xl transition-all ${
+                                      hasError ? "bg-rose-50/50 border border-rose-200" : ""
+                                    }`}>
+                                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                        {field.label} {field.required && <span className="text-rose-500">*</span>}
+                                      </label>
+
+                                      {(field.type === "phone" || field.id === "f_core_phone") && (
+                                        <CountryPhoneInput
+                                          value={customAnswers[field.id] || ""}
+                                          onChange={(val) => {
+                                            setCustomAnswers(prev => ({ ...prev, [field.id]: val }));
+                                            if (checkoutSectionErrors[field.id]) {
+                                              setCheckoutSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                            }
+                                          }}
+                                          placeholder={field.placeholder || ""}
+                                          required={field.required}
+                                        />
+                                      )}
+
+                                      {field.type === "country" && (
+                                        <CountrySelect
+                                          value={customAnswers[field.id] || ""}
+                                          onChange={(val) => {
+                                            setCustomAnswers(prev => ({ ...prev, [field.id]: val }));
+                                            if (checkoutSectionErrors[field.id]) {
+                                              setCheckoutSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                            }
+                                          }}
+                                          placeholder={field.placeholder || "Select your country..."}
+                                          required={field.required}
+                                        />
+                                      )}
+
+                                      {field.type === "city" && (
+                                        <CitySelect
+                                          value={customAnswers[field.id] || ""}
+                                          country={
+                                            customAnswers["f_country"] || 
+                                            customAnswers["country"] || 
+                                            Object.entries(customAnswers).find(([k]) => k.toLowerCase().includes("country"))?.[1] || 
+                                            ""
+                                          }
+                                          onChange={(val) => {
+                                            setCustomAnswers(prev => ({ ...prev, [field.id]: val }));
+                                            if (checkoutSectionErrors[field.id]) {
+                                              setCheckoutSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                            }
+                                          }}
+                                          placeholder={field.placeholder || "Select or enter your city..."}
+                                          required={field.required}
+                                        />
+                                      )}
+
+                                      {field.type === "picture" && (
+                                        <FormImageUploader
+                                          value={customAnswers[field.id] || ""}
+                                          onChange={(val) => {
+                                            setCustomAnswers(prev => ({ ...prev, [field.id]: val }));
+                                            if (checkoutSectionErrors[field.id]) {
+                                              setCheckoutSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                            }
+                                          }}
+                                          placeholder={field.placeholder || "Upload your photo from phone or computer"}
+                                          required={field.required}
+                                        />
+                                      )}
+
+                                      {["pdf", "word", "excel", "csv", "pptx", "file"].includes(field.type) && (
+                                        <FormFileUploader
+                                          fileType={field.type}
+                                          value={customAnswers[field.id] || ""}
+                                          onChange={(val) => {
+                                            setCustomAnswers(prev => ({ ...prev, [field.id]: val }));
+                                            if (checkoutSectionErrors[field.id]) {
+                                              setCheckoutSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                            }
+                                          }}
+                                          placeholder={field.placeholder || ""}
+                                          required={field.required}
+                                        />
+                                      )}
+
+                                      {["text", "email", "number"].includes(field.type) && field.id !== "f_core_phone" && (
+                                        <input
+                                          type={field.type}
+                                          required={field.required}
+                                          value={customAnswers[field.id] || ""}
+                                          onChange={(e) => {
+                                            setCustomAnswers(prev => ({ ...prev, [field.id]: e.target.value }));
+                                            if (checkoutSectionErrors[field.id]) {
+                                              setCheckoutSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                            }
+                                          }}
+                                          placeholder={field.placeholder || "Enter details..."}
+                                          className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-semibold text-slate-900 outline-none transition-all"
+                                        />
+                                      )}
+
+                                      {field.type === "textarea" && (
+                                        <textarea
+                                          required={field.required}
+                                          rows={2}
+                                          value={customAnswers[field.id] || ""}
+                                          onChange={(e) => {
+                                            setCustomAnswers(prev => ({ ...prev, [field.id]: e.target.value }));
+                                            if (checkoutSectionErrors[field.id]) {
+                                              setCheckoutSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                            }
+                                          }}
+                                          placeholder={field.placeholder || "Enter details..."}
+                                          className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-medium text-slate-900 outline-none transition-all"
+                                        />
+                                      )}
+
+                                      {field.type === "select" && (
+                                        <select
+                                          required={field.required}
+                                          value={customAnswers[field.id] || ""}
+                                          onChange={(e) => {
+                                            setCustomAnswers(prev => ({ ...prev, [field.id]: e.target.value }));
+                                            if (checkoutSectionErrors[field.id]) {
+                                              setCheckoutSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                            }
+                                          }}
+                                          className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-blue-600 rounded-xl text-xs font-semibold text-slate-900 outline-none cursor-pointer"
+                                        >
+                                          <option value="">Select option...</option>
+                                          {(field.options || []).map((opt, i) => (
+                                            <option key={i} value={opt}>{opt}</option>
+                                          ))}
+                                        </select>
+                                      )}
+
+                                      {field.type === "radio" && (
+                                        <div className="flex flex-col gap-1.5 mt-1">
+                                          {(field.options || []).map((opt, i) => (
+                                            <label key={i} className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                                              <input
+                                                type="radio"
+                                                name={field.id}
+                                                required={field.required}
+                                                checked={customAnswers[field.id] === opt}
+                                                onChange={() => {
+                                                  setCustomAnswers(prev => ({ ...prev, [field.id]: opt }));
+                                                  if (checkoutSectionErrors[field.id]) {
+                                                    setCheckoutSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                                  }
+                                                }}
+                                                className="text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
+                                              />
+                                              <span>{opt}</span>
+                                            </label>
+                                          ))}
+                                        </div>
+                                      )}
+
+                                      {field.type === "checkbox" && (
+                                        <div className="flex flex-col gap-1.5 mt-1">
+                                          {(field.options || []).map((opt, i) => {
+                                            const currentList = Array.isArray(customAnswers[field.id]) ? customAnswers[field.id] : [];
+                                            const isChecked = currentList.includes(opt);
+                                            return (
+                                              <label key={i} className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={isChecked}
+                                                  onChange={(e) => {
+                                                    const updated = e.target.checked
+                                                      ? [...currentList, opt]
+                                                      : currentList.filter(x => x !== opt);
+                                                    setCustomAnswers(prev => ({ ...prev, [field.id]: updated }));
+                                                    if (checkoutSectionErrors[field.id]) {
+                                                      setCheckoutSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                                    }
+                                                  }}
+                                                  className="text-blue-600 focus:ring-blue-500 rounded h-3.5 w-3.5"
+                                                />
+                                                <span>{opt}</span>
+                                              </label>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+
+                                      {field.type === "switch" && (
+                                        <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer mt-1">
+                                          <input
+                                            type="checkbox"
+                                            checked={customAnswers[field.id] ?? field.defaultValue ?? false}
+                                            onChange={(e) => {
+                                              setCustomAnswers(prev => ({ ...prev, [field.id]: e.target.checked }));
+                                              if (checkoutSectionErrors[field.id]) {
+                                                setCheckoutSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                              }
+                                            }}
+                                            className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+                                          />
+                                          <span>{field.helpText || "Yes, opt-in"}</span>
+                                        </label>
+                                      )}
+
+                                      {hasError && (
+                                        <p className="text-[10px] font-bold text-rose-600 mt-1">{checkoutSectionErrors[field.id]}</p>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                            </div>
+                          )}
+                        </>
+                      )}
+
+                      {/* SECTION 2+ / PAGE 2+: DYNAMIC SECTION QUESTIONS */}
+                      {hasMultiSections && safeCheckoutIdx > 0 && (
+                        <div className="space-y-4 pt-1">
+                          {/* Section Title & Description Banner */}
+                          <div className="bg-blue-50/70 border border-blue-100 rounded-2xl p-4">
+                            <h3 className="text-sm font-bold text-blue-950">
+                              {currentCheckoutSec.title || `Section ${safeCheckoutIdx + 1}`}
+                            </h3>
+                            {currentCheckoutSec.description && (
+                              <p className="text-xs text-blue-800/80 mt-1 font-medium">
+                                {currentCheckoutSec.description}
+                              </p>
+                            )}
                           </div>
-                        ) : (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {["Standard Admission", "VIP Access Pass"].map((tierName) => {
-                              const isSelected = selectedTier === tierName;
-                              return (
-                                <div
-                                  key={tierName}
-                                  onClick={() => switchTicketTier(tierName)}
-                                  className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
-                                    isSelected
-                                      ? "border-blue-600 bg-blue-50/50 ring-4 ring-blue-100 shadow-2xs"
-                                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-                                  }`}
-                                >
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-xs font-extrabold text-slate-900">{tierName}</span>
-                                    <span className="text-xs font-black text-blue-600">Free</span>
-                                  </div>
-                                  <p className="text-[11px] text-slate-500 mt-1">
-                                    {tierName.includes("VIP") ? "Includes executive lounge & priority front seating" : "Standard delegate floor badge"}
-                                  </p>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
 
-                      {/* 2. ATTENDEE CREDENTIALS */}
-                      <div className="space-y-4 pt-2 border-t border-slate-100">
-                        <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                          {t("reg.badgeCredentials", "2. Attendee Badge Credentials")}
-                        </label>
-
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                            {t("reg.fullName", "Your Full Name")} <span className="text-rose-500">*</span>
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            value={rsvpName}
-                            onChange={(e) => setRsvpName(e.target.value)}
-                            placeholder="e.g. Sarah Jenkins"
-                            className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-semibold text-slate-900 outline-none transition-all"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                              {t("reg.email", "Your Email Address")} <span className="text-rose-500">*</span>
-                            </label>
-                            <input
-                              type="email"
-                              required
-                              value={rsvpEmail}
-                              onChange={(e) => setRsvpEmail(e.target.value)}
-                              placeholder="e.g. alex@company.com"
-                              className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-semibold text-slate-900 outline-none transition-all"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                              {t("reg.phone", "Phone Number")} <span className="text-rose-500">*</span>
-                            </label>
-                            <CountryPhoneInput
-                              value={rsvpPhone}
-                              onChange={setRsvpPhone}
-                              required
-                              inputClassName="py-3"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                              {t("reg.organization", "Company / Organization")}
-                            </label>
-                            <input
-                              type="text"
-                              value={rsvpCompany}
-                              onChange={(e) => setRsvpCompany(e.target.value)}
-                              placeholder="e.g. Sonatrach, Microsoft..."
-                              className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-semibold text-slate-900 outline-none transition-all"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                              {t("reg.jobTitle", "Job Title / Role")}
-                            </label>
-                            <input
-                              type="text"
-                              value={rsvpJobTitle}
-                              onChange={(e) => setRsvpJobTitle(e.target.value)}
-                              placeholder="e.g. Chief Innovation Officer"
-                              className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-semibold text-slate-900 outline-none transition-all"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* 3. DYNAMIC CUSTOM REGISTRATION QUESTIONS (IF CONFIGURED) */}
-                      {activeTicketForm && activeTicketForm.fields && activeTicketForm.fields.length > 0 && (
-                        <div className="border-t border-slate-100 pt-4 space-y-3">
-                          <div className="text-[11px] font-bold uppercase text-blue-600 tracking-wider">
-                            {t("reg.additionalQuestions", "3. Additional Registration Questions")}
-                          </div>
-
-                          {activeTicketForm.fields
-                            .filter(f => !["f_core_name", "f_core_email", "f_core_phone"].includes(f.id))
-                            .map(field => {
-                            if (field.type === "section") {
-                              return (
-                                <div key={field.id} className="pt-2">
-                                  <div className="text-xs font-bold text-slate-800">{field.label}</div>
-                                  {field.helpText && <div className="text-[10px] text-slate-400">{field.helpText}</div>}
-                                </div>
-                              );
-                            }
-
+                          {/* Questions in this section */}
+                          {(currentCheckoutSec.fields || []).filter(f => f.type !== "section").map(field => {
+                            const hasError = Boolean(checkoutSectionErrors[field.id]);
                             return (
-                              <div key={field.id}>
+                              <div key={field.id} className={`p-3 rounded-2xl transition-all ${
+                                hasError ? "bg-rose-50/50 border border-rose-200" : ""
+                              }`}>
                                 <label className="block text-[11px] font-bold text-slate-700 mb-1">
                                   {field.label} {field.required && <span className="text-rose-500">*</span>}
                                 </label>
@@ -1637,7 +2290,12 @@ export default function EventPublicLandingPage({
                                 {(field.type === "phone" || field.id === "f_core_phone") && (
                                   <CountryPhoneInput
                                     value={customAnswers[field.id] || ""}
-                                    onChange={(val) => setCustomAnswers(prev => ({ ...prev, [field.id]: val }))}
+                                    onChange={(val) => {
+                                      setCustomAnswers(prev => ({ ...prev, [field.id]: val }));
+                                      if (checkoutSectionErrors[field.id]) {
+                                        setCheckoutSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                      }
+                                    }}
                                     placeholder={field.placeholder || ""}
                                     required={field.required}
                                   />
@@ -1646,7 +2304,12 @@ export default function EventPublicLandingPage({
                                 {field.type === "country" && (
                                   <CountrySelect
                                     value={customAnswers[field.id] || ""}
-                                    onChange={(val) => setCustomAnswers(prev => ({ ...prev, [field.id]: val }))}
+                                    onChange={(val) => {
+                                      setCustomAnswers(prev => ({ ...prev, [field.id]: val }));
+                                      if (checkoutSectionErrors[field.id]) {
+                                        setCheckoutSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                      }
+                                    }}
                                     placeholder={field.placeholder || "Select your country..."}
                                     required={field.required}
                                   />
@@ -1661,7 +2324,12 @@ export default function EventPublicLandingPage({
                                       Object.entries(customAnswers).find(([k]) => k.toLowerCase().includes("country"))?.[1] || 
                                       ""
                                     }
-                                    onChange={(val) => setCustomAnswers(prev => ({ ...prev, [field.id]: val }))}
+                                    onChange={(val) => {
+                                      setCustomAnswers(prev => ({ ...prev, [field.id]: val }));
+                                      if (checkoutSectionErrors[field.id]) {
+                                        setCheckoutSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                      }
+                                    }}
                                     placeholder={field.placeholder || "Select or enter your city..."}
                                     required={field.required}
                                   />
@@ -1670,8 +2338,28 @@ export default function EventPublicLandingPage({
                                 {field.type === "picture" && (
                                   <FormImageUploader
                                     value={customAnswers[field.id] || ""}
-                                    onChange={(val) => setCustomAnswers(prev => ({ ...prev, [field.id]: val }))}
+                                    onChange={(val) => {
+                                      setCustomAnswers(prev => ({ ...prev, [field.id]: val }));
+                                      if (checkoutSectionErrors[field.id]) {
+                                        setCheckoutSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                      }
+                                    }}
                                     placeholder={field.placeholder || "Upload your photo from phone or computer"}
+                                    required={field.required}
+                                  />
+                                )}
+
+                                {["pdf", "word", "excel", "csv", "pptx", "file"].includes(field.type) && (
+                                  <FormFileUploader
+                                    fileType={field.type}
+                                    value={customAnswers[field.id] || ""}
+                                    onChange={(val) => {
+                                      setCustomAnswers(prev => ({ ...prev, [field.id]: val }));
+                                      if (checkoutSectionErrors[field.id]) {
+                                        setCheckoutSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                      }
+                                    }}
+                                    placeholder={field.placeholder || ""}
                                     required={field.required}
                                   />
                                 )}
@@ -1681,7 +2369,12 @@ export default function EventPublicLandingPage({
                                     type={field.type}
                                     required={field.required}
                                     value={customAnswers[field.id] || ""}
-                                    onChange={(e) => setCustomAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
+                                    onChange={(e) => {
+                                      setCustomAnswers(prev => ({ ...prev, [field.id]: e.target.value }));
+                                      if (checkoutSectionErrors[field.id]) {
+                                        setCheckoutSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                      }
+                                    }}
                                     placeholder={field.placeholder || "Enter details..."}
                                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-semibold text-slate-900 outline-none transition-all"
                                   />
@@ -1692,7 +2385,12 @@ export default function EventPublicLandingPage({
                                     required={field.required}
                                     rows={2}
                                     value={customAnswers[field.id] || ""}
-                                    onChange={(e) => setCustomAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
+                                    onChange={(e) => {
+                                      setCustomAnswers(prev => ({ ...prev, [field.id]: e.target.value }));
+                                      if (checkoutSectionErrors[field.id]) {
+                                        setCheckoutSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                      }
+                                    }}
                                     placeholder={field.placeholder || "Enter details..."}
                                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-medium text-slate-900 outline-none transition-all"
                                   />
@@ -1702,7 +2400,12 @@ export default function EventPublicLandingPage({
                                   <select
                                     required={field.required}
                                     value={customAnswers[field.id] || ""}
-                                    onChange={(e) => setCustomAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
+                                    onChange={(e) => {
+                                      setCustomAnswers(prev => ({ ...prev, [field.id]: e.target.value }));
+                                      if (checkoutSectionErrors[field.id]) {
+                                        setCheckoutSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                      }
+                                    }}
                                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-blue-600 rounded-xl text-xs font-semibold text-slate-900 outline-none cursor-pointer"
                                   >
                                     <option value="">Select option...</option>
@@ -1721,7 +2424,12 @@ export default function EventPublicLandingPage({
                                           name={field.id}
                                           required={field.required}
                                           checked={customAnswers[field.id] === opt}
-                                          onChange={() => setCustomAnswers(prev => ({ ...prev, [field.id]: opt }))}
+                                          onChange={() => {
+                                            setCustomAnswers(prev => ({ ...prev, [field.id]: opt }));
+                                            if (checkoutSectionErrors[field.id]) {
+                                              setCheckoutSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                            }
+                                          }}
                                           className="text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
                                         />
                                         <span>{opt}</span>
@@ -1745,6 +2453,9 @@ export default function EventPublicLandingPage({
                                                 ? [...currentList, opt]
                                                 : currentList.filter(x => x !== opt);
                                               setCustomAnswers(prev => ({ ...prev, [field.id]: updated }));
+                                              if (checkoutSectionErrors[field.id]) {
+                                                setCheckoutSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                              }
                                             }}
                                             className="text-blue-600 focus:ring-blue-500 rounded h-3.5 w-3.5"
                                           />
@@ -1760,11 +2471,20 @@ export default function EventPublicLandingPage({
                                     <input
                                       type="checkbox"
                                       checked={customAnswers[field.id] ?? field.defaultValue ?? false}
-                                      onChange={(e) => setCustomAnswers(prev => ({ ...prev, [field.id]: e.target.checked }))}
+                                      onChange={(e) => {
+                                        setCustomAnswers(prev => ({ ...prev, [field.id]: e.target.checked }));
+                                        if (checkoutSectionErrors[field.id]) {
+                                          setCheckoutSectionErrors(prev => ({ ...prev, [field.id]: undefined }));
+                                        }
+                                      }}
                                       className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
                                     />
                                     <span>{field.helpText || "Yes, opt-in"}</span>
                                   </label>
+                                )}
+
+                                {hasError && (
+                                  <p className="text-[10px] font-bold text-rose-600 mt-1">{checkoutSectionErrors[field.id]}</p>
                                 )}
                               </div>
                             );
@@ -1772,145 +2492,55 @@ export default function EventPublicLandingPage({
                         </div>
                       )}
 
-                      {/* SUBMIT BUTTON */}
-                      <div className="pt-4 border-t border-slate-100">
-                        <button
-                          type="submit"
-                          disabled={rsvpLoading}
-                          className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-extrabold text-xs sm:text-sm shadow-lg shadow-blue-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                        >
-                          {rsvpLoading ? (
-                            <>
-                              <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                              <span>{t("reg.processing", "Generating Official Badge...")}</span>
-                            </>
-                          ) : (
-                            <>
-                              <span>{t("reg.completeRegistration", "Confirm Registration & Generate Badge")}</span>
-                              <Sparkles size={16} />
-                            </>
+                      {/* VALIDATION ERROR BANNER */}
+                      {Object.keys(checkoutSectionErrors).length > 0 && (
+                        <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs font-bold text-rose-700 flex items-center gap-2">
+                          <AlertCircle size={15} className="shrink-0 text-rose-600" />
+                          <span>Please fill in all required questions marked in red before continuing.</span>
+                        </div>
+                      )}
+
+                      {/* SUBMIT / NAVIGATION BUTTONS */}
+                      <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5 flex-1">
+                          {hasMultiSections && !isCheckoutFirst && (
+                            <button
+                              type="button"
+                              onClick={handleCheckoutPrev}
+                              className="px-5 py-3.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-2xl font-bold text-xs shadow-2xs transition-all cursor-pointer"
+                            >
+                              Back
+                            </button>
                           )}
-                        </button>
-                        <p className="text-center text-[11px] text-slate-400 mt-2 font-medium">
-                          🔒 Instant verified access • Digital pass delivered immediately
-                        </p>
+
+                          {hasMultiSections && !isCheckoutLast ? (
+                            <button
+                              type="button"
+                              onClick={handleCheckoutNext}
+                              className="flex-1 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-extrabold text-xs sm:text-sm shadow-lg shadow-blue-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                            >
+                              <span>Next</span>
+                              <ChevronRight size={16} />
+                            </button>
+                          ) : (
+                            <button
+                              type="submit"
+                              disabled={rsvpLoading}
+                              className="flex-1 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-extrabold text-xs sm:text-sm shadow-lg shadow-blue-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                            >
+                              {rsvpLoading ? (
+                                <>
+                                  <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                  <span>{t("reg.processing", "Joining Event...")}</span>
+                                </>
+                              ) : (
+                                <span>{t("reg.joinEvent", "Join the Event")}</span>
+                              )}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </form>
-                  </div>
-
-                  {/* ======================================================== */}
-                  {/* RIGHT COLUMN: REALISTIC A6 CONFERENCE BADGE              */}
-                  {/* ======================================================== */}
-                  <div className="lg:col-span-5 flex flex-col items-center sticky top-24">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 -ml-4.5" />
-                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-600">
-                        Live A6 Badge Preview (Real-time)
-                      </span>
-                    </div>
-
-                    {/* Physical Lanyard Clip Slot */}
-                    <div className="w-16 h-3.5 bg-slate-300 rounded-full mx-auto border-2 border-slate-400 shadow-inner flex items-center justify-center -mb-2 z-10 relative">
-                      <div className="w-10 h-1.5 bg-slate-800 rounded-full" />
-                    </div>
-
-                    {/* Standard A6 Badge Container (105mm x 148mm ratio) */}
-                    <div className="w-full max-w-[340px] sm:max-w-[360px] bg-white rounded-3xl border-2 border-slate-200 shadow-xl overflow-hidden flex flex-col relative transition-all duration-300 hover:shadow-2xl">
-                      {/* Top Header with Event Cover Graphic */}
-                      <div className="relative h-28 w-full overflow-hidden bg-slate-950 flex flex-col justify-between p-4">
-                        <img src={banner} alt="Cover" className="absolute inset-0 w-full h-full object-cover opacity-60" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-transparent" />
-                        <div className="relative z-10 flex items-center justify-between">
-                          <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-white/20 text-white uppercase backdrop-blur-xs">
-                            {category}
-                          </span>
-                          <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-blue-600 text-white uppercase shadow-xs">
-                            {type}
-                          </span>
-                        </div>
-                        <div className="relative z-10">
-                          <h4 className="text-xs font-black text-white line-clamp-1">{title}</h4>
-                        </div>
-                      </div>
-
-                      {/* Tier Ribbon */}
-                      <div className={`py-1.5 px-4 text-center text-xs font-black uppercase tracking-wider transition-all duration-300 ${
-                        selectedTier.toLowerCase().includes("vip")
-                          ? "bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-500 text-slate-950"
-                          : selectedTier.toLowerCase().includes("online")
-                          ? "bg-gradient-to-r from-purple-600 to-indigo-700 text-white"
-                          : "bg-gradient-to-r from-blue-600 to-indigo-700 text-white"
-                      }`}>
-                        {selectedTier}
-                      </div>
-
-                      {/* Badge Body */}
-                      <div className="p-6 pt-2 text-center flex-1 flex flex-col items-center">
-                        <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-700 text-white flex items-center justify-center text-2xl font-black shadow-lg mx-auto border-4 border-white -mt-10 mb-2 transition-transform duration-200">
-                          {(rsvpName.trim() || "HM").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase() || "AM"}
-                        </div>
-
-                        <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight uppercase break-words px-2 leading-tight min-h-[28px]">
-                          {rsvpName.trim() || "YOUR FULL NAME"}
-                        </h2>
-
-                        <p className="text-xs font-extrabold text-blue-600 uppercase tracking-wide mt-1 min-h-[16px]">
-                          {rsvpJobTitle.trim() || "DELEGATE / ATTENDEE"}
-                        </p>
-
-                        <p className="text-xs font-bold text-slate-700 mt-0.5 min-h-[16px]">
-                          {rsvpCompany.trim() || organization}
-                        </p>
-
-                        <p className="text-[11px] text-slate-400 font-mono mt-0.5 truncate max-w-xs">
-                          {rsvpEmail.trim() || "attendee@email.com"}
-                        </p>
-
-                        {/* Simulated QR Code / Hologram Strip */}
-                        <div className="w-full bg-slate-50 rounded-2xl border border-slate-200 p-3 mt-4 flex items-center justify-between gap-3">
-                          <div className="w-16 h-16 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs shrink-0 flex items-center justify-center relative overflow-hidden">
-                            <div className="grid grid-cols-4 gap-1 w-full h-full p-1 opacity-80">
-                              <div className="bg-slate-900 rounded-xs" />
-                              <div className="bg-slate-900 rounded-xs" />
-                              <div className="bg-slate-200 rounded-xs" />
-                              <div className="bg-slate-900 rounded-xs" />
-                              <div className="bg-slate-900 rounded-xs" />
-                              <div className="bg-blue-600 rounded-xs" />
-                              <div className="bg-slate-900 rounded-xs" />
-                              <div className="bg-slate-200 rounded-xs" />
-                              <div className="bg-slate-200 rounded-xs" />
-                              <div className="bg-slate-900 rounded-xs" />
-                              <div className="bg-blue-600 rounded-xs" />
-                              <div className="bg-slate-900 rounded-xs" />
-                              <div className="bg-slate-900 rounded-xs" />
-                              <div className="bg-slate-200 rounded-xs" />
-                              <div className="bg-slate-900 rounded-xs" />
-                              <div className="bg-slate-900 rounded-xs" />
-                            </div>
-                          </div>
-
-                          <div className="text-left flex-1 space-y-1">
-                            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase">
-                              <ShieldCheck size={11} />
-                              <span>LIVE CREDENTIAL</span>
-                            </div>
-                            <div className="text-[10px] text-slate-500 font-mono font-bold">
-                              PASS ID: <span className="text-slate-900 font-extrabold">EZ-2026-LIVE</span>
-                            </div>
-                            <div className="text-[9px] text-slate-400">
-                              QR activates upon confirmation
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Badge Footer */}
-                      <div className="px-4 py-2.5 bg-slate-900 text-white flex items-center justify-between text-[10px] font-semibold">
-                        <span>{startDate}</span>
-                        <span className="truncate max-w-[160px] text-slate-400">{location.split(',')[0]}</span>
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -1960,8 +2590,9 @@ export default function EventPublicLandingPage({
                 {activeFeedbackForm.fields.map(field => {
                   if (field.type === "section") {
                     return (
-                      <div key={field.id} className="pt-2 border-t border-slate-100">
-                        <div className="text-xs font-bold text-slate-800">{field.label}</div>
+                      <div key={field.id} className="pt-3 pb-1 border-t border-slate-100">
+                        <div className="text-xs font-bold text-slate-900">{field.label}</div>
+                        {field.helpText && <p className="text-[11px] text-slate-500 mt-0.5">{field.helpText}</p>}
                       </div>
                     );
                   }
@@ -2011,6 +2642,16 @@ export default function EventPublicLandingPage({
                           value={feedbackAnswers[field.id] || ""}
                           onChange={(val) => setFeedbackAnswers(prev => ({ ...prev, [field.id]: val }))}
                           placeholder={field.placeholder || "Upload your photo from phone or computer"}
+                          required={field.required}
+                        />
+                      )}
+
+                      {["pdf", "word", "excel", "csv", "pptx", "file"].includes(field.type) && (
+                        <FormFileUploader
+                          fileType={field.type}
+                          value={feedbackAnswers[field.id] || ""}
+                          onChange={(val) => setFeedbackAnswers(prev => ({ ...prev, [field.id]: val }))}
+                          placeholder={field.placeholder || ""}
                           required={field.required}
                         />
                       )}
